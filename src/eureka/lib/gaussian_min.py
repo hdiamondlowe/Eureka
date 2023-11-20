@@ -181,12 +181,15 @@ def mingauss(img, yxguess, meta):
     minx = -int(meta.gauss_frame)+int(x)
     maxx = int(meta.gauss_frame)+int(x)
 
+    miny = -int(meta.gauss_frame)+int(y)
+    maxy = int(meta.gauss_frame)+int(y)
+
     # Set Frame size based off of frame crop
-    frame = img[:, minx:maxx]
+    frame = img[miny:maxy, minx:maxx] - np.nanmedian(img)
 
     # Create meshgrid
     x_shape = np.arange(img.shape[1])[minx:maxx]
-    y_shape = np.arange(img.shape[0])
+    y_shape = np.arange(img.shape[0])[miny:maxy]
     x_mesh, y_mesh = np.meshgrid(x_shape, y_shape)
 
     # The initial guess for [Gaussian amplitude, xsigma, ysigma]
