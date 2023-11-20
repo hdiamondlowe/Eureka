@@ -888,7 +888,7 @@ def phot_centroid_fgc(img, x, y, sx, sy, i, m, meta):
 
     # Image of source
     vmin, vmax = np.percentile(img[~np.isnan(img)], 3), np.percentile(img[~np.isnan(img)], 97)
-    ax[1, 0].imshow(img, origin='lower', aspect='auto')
+    ax[1, 0].imshow(img, origin='lower', aspect='auto', vmin=vmin, vmax=vmax)
 
     ax[1, 0].axhline(y, color='C3', alpha=0.7)
     ax[1, 0].axvline(x, color='C3', alpha=0.7)
