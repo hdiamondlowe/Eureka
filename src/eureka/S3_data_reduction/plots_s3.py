@@ -762,7 +762,8 @@ def phot_centroid(data, meta):
     """
     plt.figure(3109)
     plt.clf()
-    fig, ax = plt.subplots(4, 1, num=3019, figsize=(10, 6), sharex=True)
+    fig, ax = plt.subplots(4, 1, num=3019, figsize=(10, 6), sharex=True,
+                           gridspec_kw={'left':0.1, 'right':0.77, 'hspace':0.05})
     plt.suptitle('Centroid positions over time')
 
     cx = data.centroid_x.values
@@ -989,8 +990,11 @@ def phot_2d_frame(data, meta, m, i):
     ymin = data.flux.y.min().values-meta.ywindow[0]
     ymax = data.flux.y.max().values-meta.ywindow[0]
 
-    vmax = np.nanmedian(flux)+8*np.nanstd(flux)
-    vmin = np.nanmedian(flux)-3*np.nanstd(flux)
+    # HDL: can now see finer detail in centroid plots; e.g., if background stars are in annulus
+    vmin = np.percentile(np.hstack(flux)[~np.isnan(np.hstack(flux))], 3)
+    vmax = np.percentile(np.hstack(flux)[~np.isnan(np.hstack(flux))], 97)
+    #vmax = np.nanmedian(flux)+8*np.nanstd(flux)
+    #vmin = np.nanmedian(flux)-3*np.nanstd(flux)
 
     im = plt.imshow(flux, vmin=vmin, vmax=vmax, origin='lower', aspect='equal',
                     extent=[xmin, xmax, ymin, ymax])
