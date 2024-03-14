@@ -178,6 +178,8 @@ def mingauss(img, yxguess, meta):
         print("Invalid centroid_tech option")
     
     # Cropping frame to speed up guassian fit
+    if not np.isfinite(x): x = 0
+    if not np.isfinite(y): y = 0
     minx = -int(meta.gauss_frame)+int(x)
     maxx = int(meta.gauss_frame)+int(x)
 
