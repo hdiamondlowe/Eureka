@@ -4,9 +4,10 @@
 
 suffix              uncal
 
+maximum_cores       'half'  #Options are 'none', quarter', 'half', 'all'
+
 # Control ramp fitting method
 ramp_fit_algorithm  'default'   #Options are 'default', 'mean', or 'differenced'
-ramp_fit_max_cores  'none'  #Options are 'none', quarter', 'half','all'
 
 # Pipeline stages
 skip_group_scale    False
@@ -29,7 +30,7 @@ jump_rejection_threshold  4.0 #float, default is 4.0, CR sigma rejection thresho
 custom_linearity    False
 linearity_file      /path/to/custom/linearity/fits/file
 
-# Custom bias
+# Custom bias when using NIRSpec G395H
 bias_correction     None    # Bias correction options: [mean, group_level, smooth, None]
 bias_group          1       # Group number options: [1, 2, ..., each]
 bias_smooth_length  201     # Window length when using 'smooth' bias correction
@@ -48,7 +49,7 @@ grouplevel_bg       True
 ncpu                6
 bg_y1               6
 bg_y2               26
-bg_deg              0 
+bg_deg              0
 p3thresh            5
 verbose             True
 isplots_S1          3

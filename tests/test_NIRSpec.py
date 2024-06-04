@@ -59,7 +59,7 @@ def test_NIRSpec(capsys):
     if s2_installed:
         # Only run S2 stuff if jwst package has been installed
         s2_meta = s2.calibrateJWST(meta.eventlabel, ecf_path=ecf_path)
-        
+
         s2_cites = np.union1d(COMMON_IMPORTS[1], ["nirspec"])
         assert np.array_equal(s2_meta.citations, s2_cites)
 
@@ -108,7 +108,7 @@ def test_NIRSpec(capsys):
     assert os.path.exists(name)
     assert os.path.exists(name+os.sep+'figs')
 
-    s5_cites = np.union1d(s4_cites, COMMON_IMPORTS[4] + ["batman"])
+    s5_cites = np.union1d(s4_cites, COMMON_IMPORTS[4] + ["batman", "celerite"])
     assert np.array_equal(s5_meta.citations, s5_cites)
 
     # remove temporary files

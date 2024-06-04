@@ -5,6 +5,7 @@
 ncpu            1           # Number of CPUs
 nfiles          1           # The number of data files to analyze simultaneously
 max_memory      0.5         # The maximum fraction of memory you want utilized by read-in frames (this will reduce nfiles if need be)
+indep_batches   False       # Independently treat each batch of files? Strongly recommended to leave this as False unless you have a clear reason to set it to True.
 suffix          calints     # Data file suffix
 photometry      True        # Set to True if the user wants to analyse a photometric dataset
 
@@ -23,7 +24,7 @@ bg_thresh       [5,5]       # Double-iteration X-sigma threshold for outlier rej
 # Photometric extraction parameters
 interp_method   linear      # Interpolate bad pixels. Options: None (if no interpolation should be performed), linear, nearest, cubic
 ctr_guess       [698, 516]  # Initial guess of centroid position. If None, will first perform centroiding on whole frame (can sometimes fail)
-ctr_cutout_size 10          # Cutoff size all around the centroid after the coarse centroid calculation or first centroid guess when using the mgmc method. 
+ctr_cutout_size 10          # Cutoff size all around the centroid after the coarse centroid calculation or first centroid guess when using the mgmc method.
 centroid_method mgmc        # Method used for centroiding. Options: mgmc, fgc
 oneoverf_corr   None        # Options: None, meanerr, median
 skip_apphot_bg  False       # Skips the background subtraction during the aperture photometry step
