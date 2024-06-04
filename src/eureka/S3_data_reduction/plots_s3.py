@@ -907,6 +907,7 @@ def phot_centroid_fgc(img, x, y, sx, sy, i, m, meta):
                   linestyle='dashed')
     ax[0, 0].set_xlabel('x position')
     ax[0, 0].set_ylabel('Normalized Flux')
+    ax[0, 0].grid(alpha=0.3)
 
     # Y gaussian plot
     med_y = np.nanmedian(np.nansum(img, axis=1))
@@ -921,6 +922,7 @@ def phot_centroid_fgc(img, x, y, sx, sy, i, m, meta):
                   linestyle='dashed')
     ax[1, 1].set_ylabel('y position')
     ax[1, 1].set_xlabel('Normalized Flux')
+    ax[1, 1].grid(alpha=0.3)
 
     # Last plot in (0,1) not used
     ax[0, 1].set_axis_off()

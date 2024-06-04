@@ -203,6 +203,12 @@ class EurekaS1Pipeline(Detector1Pipeline):
             if hasattr(meta, 'custom_bias') and meta.custom_bias:
                 self.superbias.override_superbias = meta.superbias_file
         elif instrument in ['MIRI']:
+            print('')
+            print('')
+            print("DEBUG - HDL:", meta.skip_emicorr)
+            print('')
+            print('')
+            self.emicorr.skip = meta.skip_emicorr
             self.firstframe.skip = meta.skip_firstframe
             self.lastframe.skip = meta.skip_lastframe
             self.rscd.skip = meta.skip_rscd
