@@ -402,7 +402,11 @@ def genlc(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
                 normspec = util.normalize_spectrum(
                     meta, spec.aplev.values,
                     scandir=getattr(spec, 'scandir', None))
-                meta.mad_s4 = util.get_mad_1d(normspec)
+                if meta.mad_clip is not None:
+                    # Remove requested data points
+                    meta, normspec, log = util.mad_clip(normspec, meta, log)
+                    meta.mad_s4 = util.get_mad_1d(normspec)
+                else: meta.mad_s4 = util.get_mad_1d(normspec)
             log.writelog(f"Stage 4 MAD = {np.round(meta.mad_s4, 2):.2f} ppm")
             if not meta.photometry:
                 if meta.isplots_S4 >= 1:

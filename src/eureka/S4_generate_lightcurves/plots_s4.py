@@ -69,13 +69,24 @@ def binned_lightcurve(meta, log, lc, i, white=False):
                          f"MAD = {np.round(mad).astype(int)} ppm",
                          transform=ax.transAxes, color=f'C{p}')
     else:
-        plt.errorbar(lc.time.values-time_modifier, norm_lcdata, norm_lcerr,
+        if meta.mad_clip is not None:
+            # Remove requested data points
+            meta, lcpoints, log = util.mad_clip(norm_lcdata, meta, log)
+            meta, times, log    = util.mad_clip(lc.time.values-time_modifier, meta, log)
+            meta, err, log      = util.mad_clip(norm_lcerr, meta, log)
+
+        else: 
+            lcpoints = norm_lcdata
+            times = lc.time.values-time_modifier
+            err = norm_lcerr
+
+        plt.errorbar(times, lcpoints, err,
                      fmt='.', color=f'C{i}', mec=f'C{i}', alpha=0.1)
 
-        nbins = int(len(lc.time.values)/100)
-        binned_time = util.binData_time(lc.time.values-time_modifier, lc.time.values-time_modifier, nbins)
-        binned_flux = util.binData_time(norm_lcdata, lc.time.values-time_modifier, nbins)
-        binned_unc = util.binData_time(norm_lcerr, lc.time.values-time_modifier, nbins, err=True)
+        nbins = int(len(times)/100)
+        binned_time = util.binData_time(times, times, nbins)
+        binned_flux = util.binData_time(lcpoints, times, nbins)
+        binned_unc = util.binData_time(err, times, nbins, err=True)
         plt.errorbar(binned_time, binned_flux, yerr=binned_unc, fmt='o', markersize=3, color=f'C{i}', markeredgecolor='k', ecolor='k', elinewidth=2, zorder=1000) # this is bad and hard-coded; will need to modify for spectral case
 
         mad = util.get_mad_1d(norm_lcdata)

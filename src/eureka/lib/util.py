@@ -170,6 +170,47 @@ def manual_clip(lc, meta, log):
 
     return meta, lc, log
 
+def mad_clip(normspec, meta, log):
+    """Manually clip integrations along time axis.
+
+    Parameters
+    ----------
+    normspec: array; doesn't need time attached
+    meta : eureka.lib.readECF.MetaClass
+        The current metadata object.
+    log : logedit.Logedit
+        The open log in which notes from this step can be added.
+
+    Returns
+    -------
+    normspec : array
+        The updated array with the requested integrations removed.
+    meta : eureka.lib.readECF.MetaClass
+        The updated metadata object.
+    log : logedit.Logedit
+        The updated log.
+    """
+    log.writelog('Manually removing data points from meta.mad_clip...',
+                 mute=(not meta.verbose))
+
+    print("TEST", len(normspec))
+
+    meta.mad_clip = np.array(meta.mad_clip)
+    if len(meta.mad_clip.shape) == 1:
+        # The user didn't quite enter things right, so reshape
+        meta.mad_clip = meta.mad_clip[np.newaxis]
+
+    # Figure out which indices are being clipped
+    indx_bool = np.ones(len(normspec), dtype=bool)
+    for inds in meta.mad_clip:
+        indx_bool[inds[0]:inds[1]] = False
+
+    # Remove the requested integrations
+    normspec = normspec[indx_bool]
+
+    print("TEST", len(normspec))
+
+    return meta, normspec, log
 
 def check_nans(data, mask, log, name=''):
     """Checks where a data-like array is invalid (contains NaNs or infs).

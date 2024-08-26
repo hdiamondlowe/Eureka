@@ -99,6 +99,9 @@ class S4MetaClass(MetaClass):
         # Manually mask pixel columns by index number
         self.mask_columns = getattr(self, 'mask_columns', [])
 
+        # Manual clipping in time to compute MAD
+        self.mad_clip = getattr(self, 'mad_clip', None)
+
         # Parameters for drift tracking/correction of 1D spectra
         self.recordDrift = getattr(self, 'recordDrift', False)
         self.correctDrift = getattr(self, 'correctDrift', False)
