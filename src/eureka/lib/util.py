@@ -193,8 +193,6 @@ def mad_clip(normspec, meta, log):
     log.writelog('Manually removing data points from meta.mad_clip...',
                  mute=(not meta.verbose))
 
-    print("TEST", len(normspec))
-
     meta.mad_clip = np.array(meta.mad_clip)
     if len(meta.mad_clip.shape) == 1:
         # The user didn't quite enter things right, so reshape
@@ -207,8 +205,6 @@ def mad_clip(normspec, meta, log):
 
     # Remove the requested integrations
     normspec = normspec[indx_bool]
-
-    print("TEST", len(normspec))
 
     return meta, normspec, log
 
