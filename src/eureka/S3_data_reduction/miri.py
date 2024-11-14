@@ -11,6 +11,7 @@ from . import nircam
 from ..lib.util import read_time, supersample
 
 
+
 def read(filename, data, meta, log):
     '''Reads single FITS file from JWST's MIRI instrument.
 
