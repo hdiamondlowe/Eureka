@@ -892,9 +892,9 @@ def phot_centroid_fgc(img, mask, x, y, sx, sy, i, m, meta):
 
     # Title
     plt.suptitle('Centroid gaussian fit')
-
+    
     # Image of source
-    vmin, vmax = np.percentile(img[~np.isnan(img)], 3), np.percentile(img[~np.isnan(img)], 97)
+    vmin, vmax = np.percentile(img[~img.mask], 3), np.percentile(img[~img.mask], 97)
     ax[1, 0].imshow(img, origin='lower', aspect='auto', vmin=vmin, vmax=vmax)
 
     ax[1, 0].axhline(y, color='C3', alpha=0.7)
