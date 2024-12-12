@@ -112,6 +112,8 @@ def centerdriver(method, data, guess, trim, radius, size, i, m, meta,
         sy, sx, y, x = gmin.mingauss(img, msk, yxguess=loc, meta=meta)
         extra = sy, sx  # Gaussian 1-sigma half-widths
 
+        print("TEST in centerdriver: sx, sy", sx, sy)
+
     # only plot when we do the second fit
     if (meta.isplots_S3 >= 5 and method[-4:] == '_sec' and i < meta.nplots):
         plots_s3.phot_centroid_fgc(img, msk, x, y, sx, sy, i, m, meta)

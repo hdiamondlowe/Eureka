@@ -901,37 +901,42 @@ def phot_centroid_fgc(img, mask, x, y, sx, sy, i, m, meta):
     ax[1, 0].axvline(x, color='C3', alpha=0.7)
 
     # X gaussian plot
-    #med_x = np.ma.median(np.ma.sum(img, axis=0))
+    med_x = np.ma.median(np.ma.sum(img, axis=0))
     norm_x_factor = np.ma.sum(np.ma.sum(img, axis=0))
     ax[0, 0].plot(range(len(np.ma.sum(img, axis=0))),
                   np.ma.sum(img, axis=0)/norm_x_factor)
-    x_plot = np.linspace(0, len(np.ma.sum(img, axis=0)))
+    x_plot = np.linspace(0, len(np.ma.sum(img, axis=0)), len(np.ma.sum(img, axis=0)))
     norm_distr_x = stats.norm.pdf(x_plot, x, sx)
     norm_distr_x_scaled = \
-        norm_distr_x/np.nanmax(norm_distr_x)*np.nanmax(np.ma.sum(img, axis=0)) #-med_x)
-    ax[0, 0].plot(x_plot, norm_distr_x_scaled/norm_x_factor,
+        norm_distr_x/np.nanmax(norm_distr_x)*(np.nanmax(np.ma.sum(img, axis=0))/norm_x_factor)
+    ax[0, 0].plot(x_plot, norm_distr_x_scaled,
                   linestyle='dashed')
+    ax[0, 0].set_xlim(x-15, x+15)
     ax[0, 0].set_xlabel('x position')
     ax[0, 0].set_ylabel('Normalized Flux')
     ax[0, 0].grid(alpha=0.3)
 
     # Y gaussian plot
-    #med_y = np.ma.median(np.ma.sum(img,axis=1))
+    med_y = np.ma.median(np.ma.sum(img,axis=1))
     norm_y_factor = np.ma.sum(np.ma.sum(img, axis=0))
     ax[1, 1].plot(np.ma.sum(img, axis=1)/norm_y_factor,
                   range(len(np.ma.sum(img, axis=1))))
-    y_plot = np.linspace(0, len(np.ma.sum(img, axis=1)))
+    y_plot = np.linspace(0, len(np.ma.sum(img, axis=1)), len(np.ma.sum(img, axis=0)))
     norm_distr_y = stats.norm.pdf(y_plot, y, sy)
     norm_distr_y_scaled = \
-        norm_distr_y/np.nanmax(norm_distr_y)*np.nanmax(np.ma.sum(img, axis=1)) #-med_y)
-    ax[1, 1].plot(norm_distr_y_scaled/norm_y_factor, y_plot,
+        norm_distr_y/np.nanmax(norm_distr_y)*(np.nanmax(np.ma.sum(img, axis=1))/norm_y_factor)
+    ax[1, 1].plot(norm_distr_y_scaled, y_plot,
                   linestyle='dashed')
+    ax[1, 1].set_ylim(y-15, y+15)
     ax[1, 1].set_ylabel('y position')
     ax[1, 1].set_xlabel('Normalized Flux')
     ax[1, 1].grid(alpha=0.3)
 
     # Last plot in (0,1) not used
     ax[0, 1].set_axis_off()
+
+    # Information in top right
+    ax[0, 1].text(0.5, 0.5, f"x, y = {x}, {y}\nsx, sy = {sx}, {sy}")
 
     # Naming figure
     file_number = str(m).zfill(int(np.floor(np.log10(meta.num_data_files))+1))

@@ -195,7 +195,7 @@ def mingauss(img, mask, yxguess, meta):
     maxy = int(meta.gauss_frame)+int(y)
 
     # Set Frame size based off of frame crop
-    frame = img[miny:maxy, minx:maxx] - np.nanmedian(img)
+    frame = img[miny:maxy, minx:maxx]
 
     # Create meshgrid
     x_shape = np.arange(img.shape[1])[minx:maxx]
@@ -204,7 +204,7 @@ def mingauss(img, mask, yxguess, meta):
 
     # The initial guess for [Gaussian amplitude, xsigma, ysigma]
     if meta.inst == 'miri':
-        initial_guess = [400, 5, 5]
+        initial_guess = [400, 1, 1]
     elif meta.inst == 'nircam':
         initial_guess = [400, 41, 41]
     else:
