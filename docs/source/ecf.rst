@@ -160,11 +160,11 @@ Set True to perform row-by-row background subtraction (only useful for NIRCam).
 
 bg_x1
 '''''
-Left edge of exclusion region for row-by-row background subtraction.
+The pixel number for the end of the left background region for row-by-row background subtraction. The background region goes from the left of the subarray to this pixel.
 
 bg_x2
 '''''
-Right edge of exclusion region for row-by-row background subtraction.
+The pixel number for the start of the right background region for row-by-row background subtraction. The background region goes from this pixel to the right of the subarray.
 
 masktrace
 '''''''''
@@ -508,11 +508,11 @@ Set True to perform row-by-row background subtraction (only useful for NIRCam).
 
 bg_x1
 '''''
-Left edge of exclusion region for row-by-row background subtraction.
+The pixel number for the end of the left background region for row-by-row background subtraction. The background region goes from the left of the subarray to this pixel.
 
 bg_x2
 '''''
-Right edge of exclusion region for row-by-row background subtraction.
+The pixel number for the start of the right background region for row-by-row background subtraction. The background region goes from this pixel to the right of the subarray.
 
 p3thresh
 ''''''''
@@ -851,6 +851,91 @@ The path to the directory in which to output the Stage 4 JWST data and plots. Di
 
 
 
+
+Stage 4cal
+----------
+
+.. include:: ../media/S4cal_template.ecf
+   :literal:
+
+t0
+''
+Transit or eclipse midpoint (in days).
+
+
+time_offset
+'''''''''''
+Absolute time offset of time-series data (in days).  Defaults to 0.
+
+
+rprs
+''''
+Planet-to-star radius ratio.
+
+
+period
+''''''
+Orbital period (in days).
+
+
+inc
+'''
+Orbital inclination (in degrees).
+
+
+ars
+'''
+Ratio of the semimajor axis to the stellar radius, a/R*.
+
+
+t14
+'''
+Optional. Total transit duration, from t1 to t4 (see image below).  The data points before t1 and after t4 are used to determine the out-of-transit baseline flux.  When not given, t14 is computed using the orbital parameters above.  When given, the orbital parameters are ignored.
+
+
+t23
+'''
+Optional.  Full transit duration, from t2 to t3 (see image below).  The data points between t2 and t3 are used to determine the in-transit flux.  When not given, t23 is computed using the orbital parameters above.  When given, the orbital parameters are ignored.
+
+.. image:: ../media/transit_shape2.png
+
+base_dur
+''''''''
+Baseline duration used before t1 and after t4 (in days).  Flux for the baseline region combines data points from (t1 - base_dur) to t1 and from t4 to (t4 + base_dur).
+
+
+sigma_thresh
+''''''''''''
+Sigma threshold when flagging outliers along the wavelength axis.  Process is performed X times, where X is the length of the list. Defaults to [4, 4, 4].
+
+
+isplots_S4cal
+'''''''''''''
+Sets how many plots should be saved when running Stage 4cal. Defaults to 3.
+
+
+nbin_plot
+'''''''''
+The number of bins that should be used for figures 5104 and 5304. Defaults to 100.
+
+
+hide_plots
+^^^^^^^^^^
+If True, plots will automatically be closed rather than popping up on the screen.
+
+
+topdir + inputdir
+'''''''''''''''''
+The path to the directory containing the Stage 3 JWST data. Directories containing spaces should be enclosed in quotation marks.
+
+
+topdir + outputdir
+''''''''''''''''''
+The path to the directory in which to output the Stage 4cal JWST data and plots. Directories containing spaces should be enclosed in quotation marks.
+
+
+
+
 Stage 5
 -------
 
@@ -907,6 +992,18 @@ force_positivity
 ''''''''''''''''
 Optional boolean. Used by the sinusoid_pc and poet_pc models. If True, force positive phase variations (phase variations that never go below the bottom of the eclipse). Physically speaking, a negative phase curve is impossible, but strictly enforcing this can hide issues with the decorrelation or potentially bias your measured minimum flux level. Either way, use caution when choosing the value of this parameter.
 
+pixelsampling
+'''''''''''''
+Optional boolean for starry's phase curve and/or eclipse mapping model. Set to ``True`` to use starry's pixel-sampling method to ensure non-negative fluxes across the planet and set priors on the ``pixel`` parameter(s) in your EPF. Set to ``False`` (default) or leave undefined if you want to use starry's spherical harmonic method and are okay with permitting negative fluxes, or if you intend to use Eureka!'s ``sinusoid_pc``, ``quasilambert_pc``, or ``poet_pc`` methods.
+
+ydeg
+''''
+Optional integer. An integer specifying the spherical harmonic order to use with starry's phase curve and/or eclipse mapping model. This setting is mandatory if you set ``pixelsampling`` to ``True``, otherwise the setting is optional and will be inferred from your EPF settings.
+
+oversample
+''''''''''
+Optional integer. Used by starry's phase curve and/or eclipse mapping model when ``pixelsampling`` is set to ``True``. The default value is ``3`` when ``pixelsampling`` is set to ``True`` which should generally suffice for most/all fits. For more details, read the documentation for the ``get_pixel_transforms`` function at https://starry.readthedocs.io/en/latest/SphericalHarmonicMap.
+
 mutualOccultations
 ''''''''''''''''''
 Optional boolean, only relevant for starry astrophysical models. If True (default), then the model will account for planet-planet occultations; if False, then the model will not include planet-planet occultations (and will likely take longer since each planet needs to be modelled separately).
@@ -933,15 +1030,31 @@ The following three parameters control the use of pre-generated limb darkening c
 
 use_generate_ld
 ^^^^^^^^^^^^^^^
-If you want to use the generated limb-darkening coefficients from Stage 4, use exotic-ld or spam. Otherwise, use None. Important: limb-darkening coefficients are not automatically fixed, change the limb darkening parameters to 'fixed' in the .epf file if they should be fixed instead of fitted! The limb-darkening laws available to exotic-ld and spam are linear, quadratic, 3-parameter and 4-parameter non-linear.
+If you want to use the generated limb-darkening coefficients from Stage 4, use ``exotic-ld`` or ``spam``. Otherwise, use ``None``. Important: limb-darkening coefficients are not automatically fixed, change the limb darkening parameters to ``'fixed'`` in the .epf file if they should be fixed instead of fitted! The limb-darkening laws available to exotic-ld and spam are linear, quadratic, 3-parameter, and 4-parameter (non-linear).
 
 ld_file
 ^^^^^^^
-If you want to use custom calculated limb-darkening coefficients, set to the fully qualified path to a file containing limb darkening coefficients that you want to use. Otherwise, set to None. Note: this option only works if use_generate_ld=None. The file should be a plain .txt file with one column for each limb darkening coefficient and one row for each wavelength range.
+If you want to use custom calculated limb-darkening coefficients, set to the fully qualified path to a file containing limb-darkening coefficients that you want to use. Otherwise, set to ``None``. Note: this option only works if ``use_generate_ld=None``. The file should be a plain .txt file with one column for each limb-darkening coefficient and one row for each wavelength range. Important: limb-darkening coefficients are not automatically fixed, change the limb darkening parameters to ``'fixed'`` in the .epf file if they should be fixed instead of fitted!
 
 ld_file_white
 ^^^^^^^^^^^^^
-The same type of parameter as ld_file, but for the limb-darkening coefficients to be used for the white-light fit. This parameter is required if ld_file is not None and any of your EPF parameters are set to white_free or white_fixed. If no parameter is set to white_free or white_fixed, then this parameter is ignored.
+The same type of parameter as ``ld_file``, but for the limb-darkening coefficients to be used for the white-light fit. This parameter is required if ``ld_file`` is not None and any of your EPF parameters are set to ``white_free`` or ``white_fixed``. If no parameter is set to ``white_free`` or ``white_fixed``, then this parameter is ignored.
+
+recenter_ld_prior
+^^^^^^^^^^^^^^^^^
+If one of ``use_generate_ld`` or ``ld_file`` is not set to ``None``, then this setting allows you apply a Normal prior centered on the limd-darkening model. To do this, you will need to keep the limb-darkening coefficients specified as ``'free'`` in your EPF with your desired Gaussian standard deviation; any initial guess and Gaussian mean values you enter will be replaced with the values loaded in from the limb-darkeing model for each wavelength.
+
+spotcon_file
+^^^^^^^^^^^^
+If you want to use custom calculated spot-contrast coefficients, set to the fully qualified path to a file containing spot-contrast coefficients that you want to use. Otherwise, set to ``None``. The file should be a plain .txt file with one column (or one column per spot if using starry) and one row for each wavelength bin. Important: spot-contrast coefficients are not automatically fixed, change the spot-contrast parameters to ``'fixed'`` in the .epf file if they should be fixed instead of fitted!
+
+spotcon_file_white
+^^^^^^^^^^^^^^^^^^
+The same type of parameter as ``spotcon_file``, but for the spot contrast coefficients to be used for the white-light fit. This parameter is required if ``spotcon_file`` is not ``None`` and any of your EPF parameters are set to ``white_free`` or ``white_fixed``. If no parameter is set to ``white_free`` or ``white_fixed``, then this parameter is ignored.
+
+recenter_spotcon_prior
+^^^^^^^^^^^^^^^^^^^^^^
+If ``spotcon_file`` is not set to ``None``, then this setting allows you apply a Normal prior centered on the model provided by ``spotcon_file``. To do this, you will need to keep the spot-contrast coefficients specified as ``'free'`` in your EPF with your desired Gaussian standard deviation; any initial guess and Gaussian mean values you enter will be replaced with the values loaded in from ``spotcon_file`` for each wavelength.
 
 GP parameters
 '''''''''''''
@@ -1099,11 +1212,13 @@ This file describes the transit/eclipse and systematics parameters and their pri
 
 ``Name`` defines the specific parameter being fit for. When fitting for multiple channels simultaneously, you can add optionally add ``_ch#`` after the parameter (e.g., ``rprs``, ``rprs_ch1``, ``rprs_ch2``, etc.) to set channel-specific priors; if you don't manually set a different prior for each channel, the code will default to the prior for the 0th channel (e.g., ``rprs``).
 Available fitting parameters are:
+
    - Transit and Eclipse Depth Parameters
       - ``rp`` or ``rprs`` - planet-to-star radius ratio, for the transit models.
       - ``fp`` or ``fpfs`` - planet-to-star flux ratio, for the eclipse models.
       - ``rp2`` or ``rprs2`` - an additional planet-to-star radius ratio for use with the catwoman transit model to model transit limb-asymmetries.
       - ``phi`` - the angle (in degrees) of the line separating the semi-circles defined by ``rp`` and ``rp2`` in the catwoman transit model. If ``phi`` is set to 90 degrees (the parameter's default value), the ``rp`` is the trailing hemisphere and ``rp2`` is the leading hemisphere. If ``phi`` is set to 0, then ``rp`` is the northern hemisphere and ``rp2`` is the southern hemisphere.
+
       When fitting for multiple planets, add ``_pl#`` after the parameter (e.g., ``rprs``, ``rprs_pl1``, ``rprs_pl2``, etc.). This also applies to the planetaty orbital parameters below. Also be sure to set the ``num_planets`` parameter in your ECF (not EPF) to specify the number of planets being modelled simultaneously.
    - Orbital Parameters
       - ``per`` - orbital period (in days)
@@ -1142,13 +1257,20 @@ Available fitting parameters are:
    - Starry Phase Curve and Eclipse Mapping Parameters
       The starry model allows for the modelling of an arbitrarily complex phase curve by fitting the phase curve using spherical harmonics terms for the planet's brightness map
 
-      - ``Yl_m`` - Spherical harmonic coefficients normalized by the Y0_0 term where ``l`` and ``m`` should be replaced with integers.
+      - You can use ``Yl_m`` - Spherical harmonic coefficients normalized by the Y0_0 term where ``l`` and ``m`` should be replaced with integers.
 
          ``l`` can be any integer greater than or equal to 1, and ``m`` can be any integer between ``-l`` to ``+l``.
          For example, the ``Y1_0`` term fits for the sub-stellar to anti-stellar brightness ratio (comparable to ``AmpCos1``),
          the ``Y1_1`` term fits for the East--West brightness ratio (comparable to ``-AmpSin1``),
          and the ``Y1_-1`` term fits for the North--South pole brightness ratio (undetectable using phase variations, but potentially detectable using eclipse mapping).
          The ``Y0_0`` term cannot be fit directly but is instead fit through the more observable ``fp`` term which is composed of the ``Y0_0`` term and the square of the ``rp`` term.
+      - OR, you can use ``pixel#`` - Spherical harmonic coefficients converted into pixel space as described at https://starry.readthedocs.io/en/latest/notebooks/PixelSampling/; using pixel sampling can allow you to impose a physicality constraint that the planetary flux does not go negative anywhere.
+
+         Replace the # with the pixel number (starting with just ``pixel`` for pixel #0).
+         The number of pixels for any given fit is a function of the spherical harmonic order (set by ``ydeg`` in your ECF) as well as the oversampling factor (set by ``oversample`` in your ECF).
+         In most cases, you will just want to set the same prior for all pixels, regardless of the spherical harmonic order or oversampling factor;
+         the simplest way to do this is to just set a prior for the ``pixel`` parameter in your EPF which will then automatically be copied to all other pixels not specified in your EPF.
+         Since the numerical values of the pixels are normalized to give the eclipse depth specified by ``fp``, it is recommended to impose a uniform prior spanning the range 0--1 for all pixels.
    - Limb Darkening Parameters
       - ``limb_dark`` - The limb darkening model to be used.
 
@@ -1180,8 +1302,10 @@ Available fitting parameters are:
       - ``spotrad#`` - The spot radius relative to the star. Replace the # with the spot number (starting with nothing (just ``spotrad``) for spot #0, and then ``spotrad1`` for the next spot)
       - ``spotlat#`` - The spot latitude in degrees. 0 is the center of the star (at time=0 if you have set the ``spotrot`` parameter). Replace the # with the spot number (starting with nothing (just ``spotlat``) for spot #0, and then ``spotlat1`` for the next spot)
       - ``spotlon#`` - The spot longitude in degrees. 0 is the center of the star (at time=0 if you have set the ``spotrot`` parameter). Replace the # with the spot number (starting with nothing (just ``spotlon``) for spot #0, and then ``spotlon1`` for the next spot)
+
       Fleck specific parameters:
       - ``spotnpts`` - The number of temporal points to evalaute at. ~200-500 is good.
+
       Starry specific parameters:
       - ``spotnpts`` - The degree of spherical harmonics on the star (ydeg). ~30 is needed to appropriately model the spot.
 
@@ -1199,7 +1323,7 @@ Available fitting parameters are:
 
       - ``h0--h5`` - Coefficients for the HST exponential + polynomial ramp model.
 
-         The HST ramp model is defined as follows: ``1 + h0*np.exp(-h1*time_batch + h2) + h3*time_batch + h4*time_batch**2``,
+         The HST ramp model is defined as follows: ``1 + h0*np.exp(-h1*time_batch) + h2*time_batch + h3*time_batch**2``,
          where ``h0--h1`` describe the exponential ramp per HST orbit, ``h2--h3`` describe the polynomial (up to order two) per HST orbit, ``h4`` is the orbital period of HST (in the same time units as the data, usually days), and ``h5`` is the time offset when computing ``time_batch``.  A good starting point for ``h4`` is 0.066422 days and ``h5`` is 0.03 days.  ``time_batch = (time_local-h5) % h4``.
          If you want to fit a linear trend in time, you can omit ``h3`` or fix it to ``0``.
 

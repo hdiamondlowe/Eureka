@@ -1,6 +1,8 @@
 import numpy as np
 from ..lib import smooth
 from . import plots_s3
+from .source_pos import gauss
+from scipy.optimize import curve_fit
 
 
 def find_column_median_shifts(data, meta, m):
@@ -39,6 +41,22 @@ def find_column_median_shifts(data, meta, m):
     # Compute the center of mass of each column
     column_coms = (np.ma.sum(pix_centers[:, None]*data, axis=0) /
                    np.ma.sum(data, axis=0))
+
+    # Center of mass doesn't always work well with calibrated spectra
+    # Therefore, use CoM as starting point for Gaussian fit
+    if meta.calibrated_spectra:
+        # Rough initial guess (heigh, center, width, BG)
+        width = np.ma.sqrt(np.ma.sum(data[:, 0] *
+                           (pix_centers-column_coms[0])**2) /
+                           np.ma.sum(data[:, 0]))
+        guess = [np.ma.max(data[:, 0]), column_coms[0], width, 0]
+        for i in np.arange(data.shape[1]):
+            # Gaussian fit for each column
+            params, _ = curve_fit(gauss, pix_centers, data[:, i],
+                                  guess, maxfev=10000)
+            column_coms[i] = params[1]
+            # Update guess for next iteration
+            guess = params
 
     # Smooth CoM values to get rid of outliers
     smooth_coms = smooth.medfilt(column_coms, 11)
@@ -135,12 +153,13 @@ def straighten_trace(data, meta, log, m):
     meta : eureka.lib.readECF.MetaClass
         The updated metadata object.
     '''
+    if meta.fittype != 'meddata':
+        # This method only works with the median profile for the extraction
+        log.writelog('  !!! Strongly recommend using meddata as the optimal '
+                     'extraction profile !!!', mute=(not meta.verbose))
+
     log.writelog('  Correcting curvature and bringing the trace to the '
                  'center of the detector...', mute=(not meta.verbose))
-    # This method only works with the median profile for the extraction
-    log.writelog('  !!! Ensure that you are using meddata for the optimal '
-                 'extraction profile !!!', mute=(not meta.verbose))
-
     # compute the correction needed from this median frame
     shifts, new_center = find_column_median_shifts(data.medflux, meta, m)
 
@@ -154,12 +173,12 @@ def straighten_trace(data, meta, log, m):
     # apply the correction and update wave_1d accordingly
     data.wave_2d.values = roll_columns(wave_data, single_shift)[0]
     data.wave_1d.values = data.wave_2d[new_center].values
-
-    log.writelog('    Correcting the curvature over all integrations...',
-                 mute=(not meta.verbose))
     # broadcast the shifts to the number of integrations
     shifts = np.reshape(np.repeat(shifts, data.flux.shape[0]),
                         (data.flux.shape[0], data.flux.shape[2]), order='F')
+
+    log.writelog('    Correcting the curvature over all integrations...',
+                 mute=(not meta.verbose))
 
     # apply the shifts to the data
     data.flux.values = roll_columns(data.flux.values, shifts)

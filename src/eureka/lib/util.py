@@ -180,7 +180,7 @@ def trim(data, meta):
     return subdata, meta
 
 
-def manual_clip(lc, meta, log):
+def manual_clip(lc, meta, log, channel=0):
     """Manually clip integrations along time axis.
 
     Parameters
@@ -191,6 +191,8 @@ def manual_clip(lc, meta, log):
         The current metadata object.
     log : logedit.Logedit
         The open log in which notes from this step can be added.
+    channel : int; optional
+        The current channel for multwhite fits.
 
     Returns
     -------
@@ -209,10 +211,19 @@ def manual_clip(lc, meta, log):
     if len(meta.manual_clip.shape) == 1:
         # The user didn't quite enter things right, so reshape
         meta.manual_clip = meta.manual_clip[np.newaxis]
+    if meta.multwhite and len(meta.manual_clip.shape) == 2:
+        # The user didn't quite enter things right, so reshape
+        meta.manual_clip = np.repeat(meta.manual_clip[np.newaxis],
+                                     len(meta.inputdirlist)+1, axis=0)
+
+    if meta.multwhite:
+        manual_clip_temp = meta.manual_clip[channel]
+    else:
+        manual_clip_temp = meta.manual_clip
 
     # Figure out which indices are being clipped
     time_bool = np.ones(len(lc.data.time), dtype=bool)
-    for inds in meta.manual_clip:
+    for inds in manual_clip_temp:
         time_bool[inds[0]:inds[1]] = False
     time_inds = np.arange(len(lc.data.time))[time_bool]
 
@@ -560,12 +571,18 @@ def binData_time(data, time, mask=None, nbin=100, err=False):
         mask = ~np.isfinite(data)
 
     # Make a copy for good measure
-    data = np.ma.masked_where(mask, data)
+    data = np.ma.masked_where(mask, data, copy=True)
 
     # Binned_statistic will copy data without keeping it a masked array
     # so we have to manually remove invalid points
-    good_time = time[~np.ma.getmaskarray(data.mask)]
-    good_data = data[~np.ma.getmaskarray(data.mask)]
+    if (type(data.mask) == np.bool_):
+        # Only good data
+        # np.ma.maskarray doesn't work with np.bool_ objects
+        good_time = time
+        good_data = data
+    else:
+        good_time = time[~np.ma.getmaskarray(data)]
+        good_data = data[~np.ma.getmaskarray(data)]
 
     binned, _, _ = binned_statistic(good_time, good_data,
                                     statistic='mean',
@@ -622,13 +639,14 @@ def normalize_spectrum(meta, optspec, opterr=None, optmask=None, scandir=None):
             if len(iscans) > 0:
                 for r in range(meta.nreads):
                     if opterr is not None:
-                        normerr[iscans[r::meta.nreads]] /= np.ma.mean(
-                            normspec[iscans[r::meta.nreads]], axis=0)
+                        normerr[iscans[r::meta.nreads]] /= np.ma.abs(
+                            np.ma.mean(normspec[iscans[r::meta.nreads]],
+                                       axis=0))
                     normspec[iscans[r::meta.nreads]] /= np.ma.mean(
                         normspec[iscans[r::meta.nreads]], axis=0)
     else:
         if opterr is not None:
-            normerr = normerr/np.ma.mean(normspec, axis=0)
+            normerr = np.ma.abs(normerr/np.ma.mean(normspec, axis=0))
         normspec = normspec/np.ma.mean(normspec, axis=0)
 
     if opterr is not None:
@@ -682,11 +700,11 @@ def get_mad(meta, log, wave_1d, optspec, optmask=None,
     optspec = np.ma.masked_where(optmask, optspec)
 
     if wave_min is not None:
-        iwmin = np.argmin(np.abs(wave_1d-wave_min))
+        iwmin = np.nanargmin(np.abs(wave_1d-wave_min))
     else:
         iwmin = 0
     if wave_max is not None:
-        iwmax = np.argmin(np.abs(wave_1d-wave_max))
+        iwmax = np.nanargmin(np.abs(wave_1d-wave_max))
     else:
         iwmax = None
 

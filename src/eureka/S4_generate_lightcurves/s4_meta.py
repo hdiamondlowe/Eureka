@@ -96,6 +96,8 @@ class S4MetaClass(MetaClass):
         self.wave_max = getattr(self, 'wave_max', None)
         self.wave_hi = getattr(self, 'wave_hi', None)
         self.wave_low = getattr(self, 'wave_low', None)
+        # NIRISS spectral order
+        self.s4_order = getattr(self, 's4_order', None)
 
         # Manually mask pixel columns by index number
         self.mask_columns = getattr(self, 'mask_columns', [])
@@ -123,6 +125,13 @@ class S4MetaClass(MetaClass):
             # really a generically safe value
             self.sigma = getattr(self, 'sigma')
             self.box_width = getattr(self, 'box_width')
+        elif self.recordDrift or self.correctDrift:
+            # Require this parameter to be explicitly set since there isn't
+            # really a generically safe value
+            self.box_width = getattr(self, 'box_width')
+        else:
+            # Set the parameter to None if irrelevant
+            self.box_width = None
         self.maxiters = getattr(self, 'maxiters', 20)
         self.boundary = getattr(self, 'boundary', 'fill')
         self.fill_value = getattr(self, 'fill_value', 'mask')

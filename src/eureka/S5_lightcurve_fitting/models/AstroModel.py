@@ -119,6 +119,31 @@ class PlanetParams():
         self.spotrot = None
         self.spotnpts = None
 
+        # Figure out how many planet map pixels
+        self.npix = len([s for s in model.parameters.dict.keys()
+                         if 'pixel' in s and '_' not in s])
+        for pix in range(self.npix):
+            # read radii, latitudes, longitudes, and contrasts
+            pixname = 'pixel'
+            if pix > 0:
+                pixname += f'{pix}'
+            setattr(self, pixname, 0)
+
+        # Figure out how many planet Ylm spherical harmonics
+        ylm_params = np.where(['Y' == par[0] and par[1].isnumeric()
+                               for par in list(model.parameters.dict.keys())
+                               ])[0]
+        if len(ylm_params) > 0:
+            l_vals = [int(list(model.parameters.dict.keys())[ind][1])
+                      for ind in ylm_params]
+            self.ydeg = max(l_vals)
+            for ell in range(1, self.ydeg+1):
+                for m in range(-ell, ell+1):
+                    setattr(self, f'Y{ell}{m}', 0)
+        else:
+            self.ydeg = 0
+
+        # Load in all the values for each astro parameter
         for item in self.__dict__.keys():
             item0 = item+self.pid_id
             try:
@@ -361,6 +386,24 @@ class AstroModel(Model):
             else:
                 self.stellar_models.append(component)
 
+    @property
+    def fit(self):
+        """A getter for the fit object."""
+        return self._fit
+
+    @fit.setter
+    def fit(self, fit):
+        """A setter for the fit object.
+
+        Parameters
+        ----------
+        fit : object
+            The fit object
+        """
+        self._fit = fit
+        for component in self.components:
+            component.fit = fit
+
     def eval(self, channel=None, pid=None, **kwargs):
         """Evaluate the function with the given values.
 
@@ -494,13 +537,6 @@ def true_anomaly(model, t, lib=np, xtol=1e-10):
     -------
     ndarray
         The true anomaly in radians.
-
-    Notes
-    -----
-    History:
-
-    - March 2023 Taylor Bell
-        Based on Bell_EBM code, but modified to enable theano code.
     """
     return 2.*lib.arctan(lib.sqrt((1.+model.ecc)/(1.-model.ecc)) *
                          lib.tan(eccentric_anomaly(model, t, lib,
@@ -526,13 +562,6 @@ def eccentric_anomaly(model, t, lib=np, xtol=1e-10):
     -------
     ndarray
         The eccentric anomaly in radians.
-
-    Notes
-    -----
-    History:
-
-    - March 2023 Taylor Bell
-        Based on Bell_EBM code, but modified to enable theano code.
     """
     ta_peri = np.pi/2.-model.w*np.pi/180.
     ea_peri = 2.*lib.arctan(lib.sqrt((1.-model.ecc)/(1.+model.ecc)) *
@@ -573,13 +602,6 @@ def FSSI_Eccentric_Inverse(model, M, lib=np, xtol=1e-10):
     -------
     ndarray
         The eccentric anomaly in radians.
-
-    Notes
-    -----
-    History:
-
-    - March 2023 Taylor Bell
-        Based on Bell_EBM code, but modified to enable theano code.
     """
     xtol = np.max([1e-15, xtol])
     nGrid = (xtol/100.)**(-1./4.)
@@ -616,13 +638,6 @@ def FSSI(Y, x, f, fP, lib=np):
     -------
     ndarray
         The numerical approximation of f^-(y).
-
-    Notes
-    -----
-    History:
-
-    - March 2023 Taylor Bell
-        Based on Bell_EBM code, but modified to enable theano code.
     """
     y = f(x)
     d = 1./fP(x)
@@ -681,15 +696,6 @@ def correct_light_travel_time(time, pl_params):
         Updated times that can be put into batman transit and eclipse functions
         that will give the expected results assuming a finite light travel
         speed.
-
-    Notes
-    -----
-    History:
-
-    - 2022-03-31 Taylor J Bell
-        Initial version based on the Bell_EMB KeplerOrbit.py file by
-        Taylor J Bell and the light travel time calculations of SPIDERMAN's
-        web.c file by Tom Louden
     '''
     # Need to convert from a/Rs to a in meters
     a = pl_params.a * (pl_params.Rs*const.R_sun.value)
@@ -705,7 +711,7 @@ def correct_light_travel_time(time, pl_params):
     else:
         # No need to solve Kepler's equation for circular orbits, so save
         # some computation time
-        transit_x = a*np.sin(pl_params.inc)
+        transit_x = a*np.sin(pl_params.inc*np.pi/180)
         old_x = transit_x*np.cos(2*np.pi*(time-pl_params.t0)/pl_params.per)
 
     # Get the radial distance variations of the planet

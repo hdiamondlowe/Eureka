@@ -2,8 +2,12 @@
 import numpy as np
 from astropy.io import fits
 import astraeus.xarrayIO as xrio
-from . import nircam, sigrej
+from . import nircam, sigrej, straighten, plots_s3
 from ..lib.util import read_time, supersample
+
+__all__ = ['read', 'straighten_trace', 'flag_ff', 'flag_bg',
+           'fit_bg', 'cut_aperture', 'standard_spectrum', 'clean_median_flux',
+           'calibrated_spectra', 'residualBackground', 'lc_nodriftcorr']
 
 
 def read(filename, data, meta, log):
@@ -74,7 +78,7 @@ def read(filename, data, meta, log):
     elif len(int_times['int_mid_BJD_TDB']) == 0:
         # There is no time information in the simulated NIRSpec data
         if meta.firstFile:
-            log.writelog('  WARNING: The timestamps for simulated MIRI data '
+            log.writelog('  WARNING: The timestamps for simulated NIRSpec data '
                          'are not in the .fits files, so using integration '
                          'number as the time value instead.')
         time = np.linspace(data.mhdr['EXPSTART'], data.mhdr['EXPEND'],
@@ -107,6 +111,8 @@ def read(filename, data, meta, log):
                                      name='v0')
     data['wave_2d'] = (['y', 'x'], wave_2d)
     data['wave_2d'].attrs['wave_units'] = wave_units
+    # Initialize bad pixel mask (False = good, True = bad)
+    data['mask'] = (['time', 'y', 'x'], np.zeros(data.flux.shape, dtype=bool))
 
     return data, meta, log
 
@@ -231,18 +237,63 @@ def cut_aperture(data, meta, log):
         The background flux values over the aperture region.
     apv0 : ndarray
         The v0 values over the aperture region.
+    apmedflux : ndarray
+        The median flux over the aperture region.
 
-    Notes
-    -----
-    History:
-
-    - 2022-06-17, Taylor J Bell
-        Initial version based on the code in s3_reduce.py
     """
     return nircam.cut_aperture(data, meta, log)
 
 
-def calibrated_spectra(data, meta, log, cutoff=1e-4):
+def standard_spectrum(data, meta, apdata, apmask, aperr):
+    """Instrument wrapper for computing the standard box spectrum.
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    apdata : ndarray
+        The pixel values in the aperture region.
+    apmask : ndarray
+        The outlier mask in the aperture region. True where pixels should be
+        masked.
+    aperr : ndarray
+        The noise values in the aperture region.
+
+    Returns
+    -------
+    data : Xarray Dataset
+        The updated Dataset object in which the spectrum data will stored.
+    """
+    return nircam.standard_spectrum(data, meta, apdata, apmask, aperr)
+
+
+def clean_median_flux(data, meta, log, m):
+    """Instrument wrapper for computing a median flux frame that is
+    free of bad pixels.
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    log : logedit.Logedit
+        The current log.
+    m : int
+        The file number.
+
+    Returns
+    -------
+    data : Xarray Dataset
+        The updated Dataset object.
+    """
+
+    return nircam.clean_median_flux(data, meta, log, m)
+
+
+def calibrated_spectra(data, meta, log):
     """Modify data to compute calibrated spectra in units of mJy.
 
     Parameters
@@ -253,25 +304,17 @@ def calibrated_spectra(data, meta, log, cutoff=1e-4):
         The metadata object.
     log : logedit.Logedit
         The current log.
-    cutoff : float
-        Flux values above the cutoff will be set to zero.
 
     Returns
     -------
     data : ndarray
         The flux values in mJy
 
-    Notes
-    -----
-    History:
-
-    - 2023-07-17, KBS
-        Initial version.
     """
     # Mask uncalibrated BG region
     log.writelog("  Setting uncalibrated pixels to zero...",
                  mute=(not meta.verbose))
-    boolmask = np.abs(data.flux.data) > cutoff
+    boolmask = np.abs(data.flux.data) > meta.cutoff
     data['flux'].data = np.where(boolmask, 0, data.flux.data)
     log.writelog(f"    Zeroed {np.sum(boolmask)} " +
                  "pixels in total.", mute=(not meta.verbose))
@@ -289,3 +332,65 @@ def calibrated_spectra(data, meta, log, cutoff=1e-4):
     data['v0'].attrs["flux_units"] = 'mJy'
 
     return data
+
+
+def straighten_trace(data, meta, log, m):
+    """Instrument-specific wrapper for straighten.straighten_trace
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+            The Dataset object in which the fits data will stored.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    log : logedit.Logedit
+        The open log in which notes from this step can be added.
+    m : int
+        The file number.
+
+    Returns
+    -------
+    data : Xarray Dataset
+        The updated Dataset object with the fits data stored inside.
+    meta : eureka.lib.readECF.MetaClass
+        The updated metadata object.
+    """
+    return straighten.straighten_trace(data, meta, log, m)
+
+
+def residualBackground(data, meta, m, vmin=None, vmax=None):
+    """Plot the median, BG-subtracted frame to study the residual BG region and
+    aperture/BG sizes. (Fig 3304)
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    m : int
+        The file number.
+    vmin : int; optional
+        Minimum value of colormap. Default is None.
+    vmax : int; optional
+        Maximum value of colormap. Default is None.
+    """
+    plots_s3.residualBackground(data, meta, m, vmin=None, vmax=None)
+
+
+def lc_nodriftcorr(spec, meta):
+    '''Plot a 2D light curve without drift correction. (Fig 3101+3102)
+
+    Fig 3101 uses a linear wavelength x-axis, while Fig 3102 uses a linear
+    detector pixel x-axis.
+
+    Parameters
+    ----------
+    spec : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    '''
+    mad = meta.mad_s3[0]
+    plots_s3.lc_nodriftcorr(meta, spec.wave_1d, spec.optspec,
+                            optmask=spec.optmask, mad=mad)

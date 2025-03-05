@@ -7,7 +7,9 @@ from astropy.io import fits
 import scipy.interpolate as spi
 import scipy.ndimage as spni
 import astraeus.xarrayIO as xrio
-from . import sigrej, source_pos, background
+from tqdm import tqdm
+
+from . import sigrej, source_pos, background, plots_s3, nircam
 from . import hst_scan as hst
 from . import bright2flux as b2f
 from ..lib import suntimecorr, utc_tt, util
@@ -571,6 +573,9 @@ def read(filename, data, meta, log):
     diffdata.attrs['filename'] = data.attrs['filename']
 
     diffdata['scandir'] = (['time'], np.repeat(temp_scandir, meta.nreads))
+    # Initialize bad pixel mask (False = good, True = bad)
+    diffdata['mask'] = (['time', 'y', 'x'],
+                        np.zeros_like(diffdata.flux, dtype=bool))
 
     return diffdata, meta, log
 
@@ -888,6 +893,7 @@ def correct_drift2D(data, meta, log, m):
     else:
         # Multiple CPUs
         pool = mp.Pool(meta.ncpu)
+        jobs = []
         for n in range(meta.n_int):
             if np.all(np.isnan(data.flux[n])):
                 # This file had one fewer read, so skip this "filler" read
@@ -903,9 +909,13 @@ def correct_drift2D(data, meta, log, m):
                                          (data.flux[n]*~data.flatmask[n]),
                                          n),
                                    callback=writeDrift2D)
+            jobs.append(res)
         pool.close()
-        pool.join()
-        res.wait()
+        iterfn = jobs
+        if meta.verbose:
+            iterfn = tqdm(iterfn)
+        for job in iterfn:
+            job.get()
 
     # Save the fitted drifts in the data object
     data['centroid_x'] = (['time'], drift2D[:, 0])
@@ -1021,6 +1031,8 @@ def cut_aperture(data, meta, log):
         The background flux values over the aperture region.
     apv0 : ndarray
         The v0 values over the aperture region.
+    apmedflux : ndarray
+        The median flux over the aperture region. Currently None.
 
     Notes
     -----
@@ -1067,4 +1079,92 @@ def cut_aperture(data, meta, log):
             apbg[n] = data.bg.values[n, ap_y1:ap_y2]
             apv0[n] = data.v0.values[n, ap_y1:ap_y2]
 
-    return apdata, aperr, apmask, apbg, apv0
+    return apdata, aperr, apmask, apbg, apv0, None
+
+
+def standard_spectrum(data, meta, apdata, apmask, aperr):
+    """Instrument wrapper for computing the standard box spectrum.
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    apdata : ndarray
+        The pixel values in the aperture region.
+    apmask : ndarray
+        The outlier mask in the aperture region. True where pixels should be
+        masked.
+    aperr : ndarray
+        The noise values in the aperture region.
+
+    Returns
+    -------
+    data : Xarray Dataset
+        The updated Dataset object in which the spectrum data will stored.
+    """
+    return nircam.standard_spectrum(data, meta, apdata, apmask, aperr)
+
+
+def clean_median_flux(data, meta, log, m):
+    """Instrument wrapper for computing a median flux frame that is
+    free of bad pixels.
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    log : logedit.Logedit
+        The current log.
+    m : int
+        The file number.
+
+    Returns
+    -------
+    data : Xarray Dataset
+        The updated Dataset object.
+    """
+
+    return nircam.clean_median_flux(data, meta, log, m)
+
+
+def residualBackground(data, meta, m, vmin=None, vmax=None):
+    """Plot the median, BG-subtracted frame to study the residual BG region and
+    aperture/BG sizes. (Fig 3304)
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    m : int
+        The file number.
+    vmin : int; optional
+        Minimum value of colormap. Default is None.
+    vmax : int; optional
+        Maximum value of colormap. Default is None.
+    """
+    plots_s3.residualBackground(data, meta, m, vmin=None, vmax=None)
+
+
+def lc_nodriftcorr(spec, meta):
+    '''Plot a 2D light curve without drift correction. (Fig 3101+3102)
+
+    Fig 3101 uses a linear wavelength x-axis, while Fig 3102 uses a linear
+    detector pixel x-axis.
+
+    Parameters
+    ----------
+    spec : Xarray Dataset
+        The Dataset object.
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    '''
+    scandir = getattr(spec, 'scandir', None)
+    mad = meta.mad_s3[0]
+    plots_s3.lc_nodriftcorr(meta, spec.wave_1d, spec.optspec,
+                            optmask=spec.optmask, scandir=scandir, mad=mad)

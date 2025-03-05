@@ -86,6 +86,10 @@ class S3MetaClass(MetaClass):
         self.dqmask = getattr(self, 'dqmask', True)
         self.manmask = getattr(self, 'manmask', None)
         self.expand = getattr(self, 'expand', 1)
+        if int(self.expand) != self.expand:
+            print('WARNING: meta.expand must be set to an integer. Rounding '
+                  f'{self.expand} to {int(np.round(self.expand))}')
+        self.expand = int(np.round(self.expand))
 
         # Outlier rejection along time axis
         self.ff_outlier = getattr(self, 'ff_outlier', False)
@@ -134,9 +138,12 @@ class S3MetaClass(MetaClass):
         if self.fittype in ['meddata', 'smooth']:
             # Require this parameter to be set if relevant
             self.window_len = getattr(self, 'window_len')
-        elif self.fittype == 'poly':
+        if self.fittype == 'poly':
             # Require this parameter to be set if relevant
             self.prof_deg = getattr(self, 'prof_deg')
+        else:
+            # Set it to None if not relevant
+            self.prof_deg = self.prof_deg = None
         if self.fittype in ['smooth', 'gauss', 'poly']:
             # Require this parameter to be set if relevant
             self.p5thresh = getattr(self, 'p5thresh')
@@ -158,6 +165,7 @@ class S3MetaClass(MetaClass):
         self.bg_x2 = getattr(self, 'bg_x2', None)
         self.bg_method = getattr(self, 'bg_method', 'mean')
         self.p3thresh = getattr(self, 'p3thresh', 5)
+        self.orders = getattr(self, 'orders', None)
 
     def set_photometric_defaults(self):
         '''Set Stage 3 specific defaults for generic photometric data.
@@ -238,6 +246,9 @@ class S3MetaClass(MetaClass):
             Initial empty version setting defaults for NIRSpec.
         '''
         self.curvature = getattr(self, 'curvature', True)
+        # When calibrated_spectra is True, flux values above the cutoff
+        # will be set to zero.
+        self.cutoff = getattr(self, 'cutoff', 1e-4)
 
         self.set_spectral_defaults()
 
@@ -252,6 +263,9 @@ class S3MetaClass(MetaClass):
             Initial empty version setting defaults for NIRISS.
         '''
         self.curvature = getattr(self, 'curvature', True)
+        self.src_ypos = getattr(self, 'src_ypos', [35, 80])
+        self.orders = getattr(self, 'orders', [1, 2])
+        self.record_ypos = getattr(self, 'record_ypos', False)
 
         self.set_spectral_defaults()
 
@@ -272,6 +286,8 @@ class S3MetaClass(MetaClass):
             self.hst_cal = getattr(self, 'hst_cal')
         self.leapdir = getattr(self, 'leapdir', 'leapdir')
         self.flatfile = getattr(self, 'flatfile', None)
+        # Applying DQ mask doesn't seem to work for WFC3
+        self.dqmask = getattr(self, 'dqmask', False)
 
         self.set_spectral_defaults()
 

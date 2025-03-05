@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 try:
     from mc3.stats import time_avg
-except:
+except ModuleNotFoundError:
     print("Could not import MC3. No Allan variance plots will be produced.")
 import corner
 from scipy import stats
@@ -15,9 +15,12 @@ try:
     import arviz as az
     from arviz.rcparams import rcParams as az_rcParams
     import starry
-except:
+except ModuleNotFoundError:
     # PyMC3 hasn't been installed
     pass
+import warnings
+warnings.filterwarnings("ignore", message='Ignoring specified arguments in '
+                                          'this call because figure with num')
 
 from ..lib import plots, util
 from ..lib.split_channels import split
@@ -40,16 +43,6 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
     isTitle : bool; optional
         Should figure have a title. Defaults to True.
 
-    Notes
-    -----
-    History:
-
-    - December 29, 2021 Taylor Bell
-        Moved plotting code to a separate function.
-    - January 7-22, 2022 Megan Mansfield
-        Adding ability to do a single shared fit across all channels
-    - February 28-March 1, 2022 Caroline Piaulet
-        Adding scatter_ppm parameter
     """
     if not isinstance(fitter, str):
         raise ValueError(f'Expected type str for fitter, instead received a '
@@ -108,12 +101,12 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
             binned_res = residuals
         else:
             nbin_plot = meta.nbin_plot
-            binned_time = util.binData_time(time, time, nbin_plot)
-            binned_flux = util.binData_time(flux, time, nbin_plot)
-            binned_unc = util.binData_time(unc, time, nbin_plot, err=True)
+            binned_time = util.binData_time(time, time, nbin=nbin_plot)
+            binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
+            binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
             binned_normflux = util.binData_time(flux/model_sys - gp, time,
-                                                nbin_plot)
-            binned_res = util.binData_time(residuals, time, nbin_plot)
+                                                nbin=nbin_plot)
+            binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
 
         fig = plt.figure(5101, figsize=(8, 6))
         plt.clf()
@@ -238,9 +231,9 @@ def plot_phase_variations(lc, model, meta, fitter, isTitle=True):
             binned_unc = unc
         else:
             nbin_plot = meta.nbin_plot
-            binned_time = util.binData_time(time, time, nbin_plot)
-            binned_flux = util.binData_time(flux, time, nbin_plot)
-            binned_unc = util.binData_time(unc, time, nbin_plot, err=True)
+            binned_time = util.binData_time(time, time, nbin=nbin_plot)
+            binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
+            binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
 
         # Setup the figure
         fig = plt.figure(5104, figsize=(8, 6))
@@ -794,6 +787,108 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
             fname_tag = f'ch{ch_number}'
         fname = (f'figs{os.sep}fig5102_{fname_tag}_lc_GP_{fitter}'
                  + plots.figure_filetype)
+        fig.savefig(meta.outputdir+fname, bbox_inches='tight', dpi=300)
+        if not meta.hide_plots:
+            plt.pause(0.2)
+
+
+def plot_eclipse_map(lc, flux_maps, meta, fitter):
+    """Plot fitted eclipse map and lat-lon slices (Figs 5105)
+
+    Parameters
+    ----------
+    lc : eureka.S5_lightcurve_fitting.lightcurve.LightCurve
+        The lightcurve data object.
+    flux_maps : array
+        The posterior distribution of the fitted maps
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    fitter : str
+        The name of the fitter (for plot filename).
+    """
+    for i, channel in enumerate(lc.fitted_channels):
+        fig = plt.figure(5105, figsize=(12, 3))
+        fig.clf()
+        axs = fig.subplots(1, 3, width_ratios=[1.4, 1, 1])
+
+        lons = np.linspace(-180, 180, np.shape(flux_maps)[2])
+        lats = np.linspace(-90, 90, np.shape(flux_maps)[1])
+
+        # Quantiles
+        p1 = 0.841
+        p2 = 0.977
+        p3 = 0.998
+
+        # Plot median map
+        ca = axs[0].contourf(lons, lats,
+                             np.quantile(1e6*flux_maps[:], 0.5, axis=0),
+                             cmap='RdBu_r')
+        axs[0].axhline(0, color='C0', ls='--')
+        axs[0].axvline(0, color='C3', ls='--')
+        axs[0].set_xticks([-180, -90, 0, 90, 180])
+        axs[0].set_yticks([-90, -45, 0, 45, 90])
+        axs[0].set_xlim([-180, 180])
+        axs[0].set_ylim([-90, 90])
+        fig.colorbar(ca, ax=axs[0], pad=-0.04,
+                     label=r'$F_{\rm p}/F_{\rm s}$ (ppm)')
+
+        # Plot slice along equator
+        lat0 = int(np.shape(flux_maps)[2]/2)
+        axs[1].fill_between(lons,
+                            1e6*np.quantile(flux_maps[:, lat0], p1, axis=0),
+                            1e6*np.quantile(flux_maps[:, lat0], 1-p1, axis=0),
+                            color='C0', alpha=0.3, ls='None')
+        axs[1].fill_between(lons,
+                            1e6*np.quantile(flux_maps[:, lat0], p2, axis=0),
+                            1e6*np.quantile(flux_maps[:, lat0], 1-p2, axis=0),
+                            color='C0', alpha=0.3, ls='None')
+        axs[1].fill_between(lons,
+                            1e6*np.quantile(flux_maps[:, lat0], p3, axis=0),
+                            1e6*np.quantile(flux_maps[:, lat0], 1-p3, axis=0),
+                            color='C0', alpha=0.3, ls='None')
+        axs[1].set_xlim([-180, 180])
+        axs[1].set_xticks([-180, -90, 0, 90, 180])
+
+        # Plot slice along equator
+        lon0 = int(np.shape(flux_maps)[1]/2)
+        axs[2].fill_between(
+            lats,
+            1e6*np.quantile(flux_maps[:, :, lon0], p1, axis=0),
+            1e6*np.quantile(flux_maps[:, :, lon0], 1-p1, axis=0),
+            color='C3', alpha=0.3, ls='None')
+        axs[2].fill_between(
+            lats,
+            1e6*np.quantile(flux_maps[:, :, lon0], p2, axis=0),
+            1e6*np.quantile(flux_maps[:, :, lon0], 1-p2, axis=0),
+            color='C3', alpha=0.3, ls='None')
+        axs[2].fill_between(
+            lats,
+            1e6*np.quantile(flux_maps[:, :, lon0], p3, axis=0),
+            1e6*np.quantile(flux_maps[:, :, lon0], 1-p3, axis=0),
+            color='C3', alpha=0.3, ls='None')
+        axs[2].set_xlim([-90, 90])
+        axs[2].set_xticks([-90, -45, 0, 45, 90])
+
+        axs[0].set_title('Median Map')
+        axs[1].set_title('Flux Along Equator')
+        axs[2].set_title(r'Flux Along 0$^{\circ}$ Longitude')
+        axs[0].set_ylabel('Latitude', labelpad=-10)
+        axs[0].set_xlabel('Longitude')
+        axs[1].set_xlabel('Longitude')
+        axs[2].set_xlabel('Latitude')
+        axs[1].set_ylabel(r'$F_{\rm p}/F_{\rm s}$ (ppm)')
+        axs[2].set_ylabel(r'$F_{\rm p}/F_{\rm s}$ (ppm)')
+
+        fig.get_layout_engine().set(wspace=0.05, w_pad=0)
+
+        if lc.white:
+            fname_tag = 'white'
+        else:
+            ch_number = str(channel).zfill(len(str(lc.nchannel)))
+            fname_tag = f'ch{ch_number}'
+        fname = (f'figs{os.sep}fig5105_{fname_tag}_eclipseMap_{fitter}' +
+                 plots.figure_filetype)
+
         fig.savefig(meta.outputdir+fname, bbox_inches='tight', dpi=300)
         if not meta.hide_plots:
             plt.pause(0.2)
