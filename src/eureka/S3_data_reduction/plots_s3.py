@@ -895,7 +895,7 @@ def phot_centroid_fgc(img, mask, x, y, sx, sy, i, m, meta):
     
     # Image of source
     vmin, vmax = np.percentile(img[~img.mask], 3), np.percentile(img[~img.mask], 97)
-    ax[1, 0].imshow(img, origin='lower', aspect='auto', vmin=vmin, vmax=vmax)
+    ax[1, 0].imshow(img, origin='lower', aspect='auto', interpolation=None, vmin=vmin, vmax=vmax)
 
     ax[1, 0].axhline(y, color='C3', alpha=0.7)
     ax[1, 0].axvline(x, color='C3', alpha=0.7)
@@ -936,7 +936,7 @@ def phot_centroid_fgc(img, mask, x, y, sx, sy, i, m, meta):
     ax[0, 1].set_axis_off()
 
     # Information in top right
-    ax[0, 1].text(0.5, 0.5, f"x, y = {x}, {y}\nsx, sy = {sx}, {sy}")
+    ax[0, 1].text(0.01, 0.5, f"x, y = {x:.2f}, {y:.2f}\nsx, sy = {sx:.3f}, {sy:.3f}", fontsize=12)
 
     # Naming figure
     file_number = str(m).zfill(int(np.floor(np.log10(meta.num_data_files))+1))

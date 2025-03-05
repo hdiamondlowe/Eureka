@@ -107,12 +107,11 @@ def centerdriver(method, data, guess, trim, radius, size, i, m, meta,
         # Median frame creation + first centroid
         x, y, refrence_median_frame = gmin.pri_cent(img, msk, meta,
                                                     saved_ref_median_frame)
+        
     elif method == 'mgmc_sec':
         # Second enhanced centroid position + gaussian widths
         sy, sx, y, x = gmin.mingauss(img, msk, yxguess=loc, meta=meta)
         extra = sy, sx  # Gaussian 1-sigma half-widths
-
-        print("TEST in centerdriver: sx, sy", sx, sy)
 
     # only plot when we do the second fit
     if (meta.isplots_S3 >= 5 and method[-4:] == '_sec' and i < meta.nplots):
