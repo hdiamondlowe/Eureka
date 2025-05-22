@@ -157,6 +157,10 @@ def lsqfitter(lc, model, meta, log, calling_function='lsq', **kwargs):
         if 'spotrad' in model.longparamlist[0]:
             plots.plot_starry_star(lc, model, meta, fitter=calling_function)
 
+    # Plot Harmonica string
+    if 'harmonica_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
+        plots.plot_harmonica_string(lc, model, meta, fitter=calling_function)
+
     # Plot GP fit + components
     if model.GP and meta.isplots_S5 >= 1:
         plots.plot_GP_components(lc, model, meta, fitter=calling_function)
@@ -167,7 +171,7 @@ def lsqfitter(lc, model, meta, log, calling_function='lsq', **kwargs):
                                  or 'quasilambert_pc' in meta.run_myfuncs):
         plots.plot_phase_variations(lc, model, meta, fitter=calling_function)
 
-    # Plot Allan plot
+    # Make RMS time-averaging plot
     if meta.isplots_S5 >= 3 and calling_function == 'lsq' and \
             np.size(lc.flux) > 20:
         # This plot is only really useful if you're actually using the
@@ -446,6 +450,10 @@ def emceefitter(lc, model, meta, log, **kwargs):
         if 'spotrad' in model.longparamlist[0]:
             plots.plot_starry_star(lc, model, meta, fitter='emcee')
 
+    # Plot Harmonica string
+    if 'harmonica_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
+        plots.plot_harmonica_string(lc, model, meta, fitter='emcee')
+
     # Plot GP fit + components
     if model.GP and meta.isplots_S5 >= 1:
         plots.plot_GP_components(lc, model, meta, fitter='emcee')
@@ -456,7 +464,7 @@ def emceefitter(lc, model, meta, log, **kwargs):
                                  or 'quasilambert_pc' in meta.run_myfuncs):
         plots.plot_phase_variations(lc, model, meta, fitter='emcee')
 
-    # Plot Allan plot
+    # Make RMS time-averaging plot
     if meta.isplots_S5 >= 3 and np.size(lc.flux) > 20:
         # mc3.stats.time_avg breaks when testing with a small
         # number of integrations
@@ -968,6 +976,10 @@ def dynestyfitter(lc, model, meta, log, **kwargs):
         if 'spotrad' in model.longparamlist[0]:
             plots.plot_starry_star(lc, model, meta, fitter='dynesty')
 
+    # Plot Harmonica string
+    if 'harmonica_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
+        plots.plot_harmonica_string(lc, model, meta, fitter='dynesty')
+
     # Plot GP fit + components
     if model.GP and meta.isplots_S5 >= 1:
         plots.plot_GP_components(lc, model, meta, fitter='dynesty')
@@ -978,7 +990,7 @@ def dynestyfitter(lc, model, meta, log, **kwargs):
                                  or 'quasilambert_pc' in meta.run_myfuncs):
         plots.plot_phase_variations(lc, model, meta, fitter='dynesty')
 
-    # Plot Allan plot
+    # Make RMS time-averaging plot
     if meta.isplots_S5 >= 3 and np.size(lc.flux) > 20:
         # mc3.stats.time_avg breaks when testing with a small
         # number of integrations
@@ -1091,6 +1103,10 @@ def lmfitter(lc, model, meta, log, **kwargs):
         if 'spotrad' in model.longparamlist[0]:
             plots.plot_starry_star(lc, model, meta, fitter='lmfitter')
 
+    # Plot Harmonica string
+    if 'harmonica_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
+        plots.plot_harmonica_string(lc, model, meta, fitter='lmfitter')
+
     # Plot GP fit + components
     if model.GP and meta.isplots_S5 >= 1:
         plots.plot_GP_components(lc, model, meta, fitter='lmfitter')
@@ -1101,7 +1117,7 @@ def lmfitter(lc, model, meta, log, **kwargs):
                                  or 'quasilambert_pc' in meta.run_myfuncs):
         plots.plot_phase_variations(lc, model, meta, fitter='lmfitter')
 
-    # Plot Allan plot
+    # Make RMS time-averaging plot
     if meta.isplots_S5 >= 3 and np.size(lc.flux) > 20:
         # mc3.stats.time_avg breaks when testing with a small
         # number of integrations

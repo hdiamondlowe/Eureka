@@ -166,8 +166,8 @@ In Stage 5:
 
    - If ``isplots_S5`` = 3: ``Eureka!`` will plot an RMS deviation plot for each channel to help check for correlated noise, plot the normalized residual distribution, and plot the fitting chains for each channel. If fitting a sinusoid_pc model, another zoomed-in figure with binned data in front of the unbinned data will be made to emphasize the phase variations.
 
-   .. figure:: ../media/S5_out/fig5301_ch0_allanplot_emcee.png
-      :alt: Stage 5 RMS deviation plot
+   .. figure:: ../media/S5_out/fig5301_ch0_RMS_TimeAveraging_emcee.png
+      :alt: Stage 5 RMS time-averaging plot
 
       Fig 5301: RMS Deviation Plot
 
@@ -185,6 +185,11 @@ In Stage 5:
       Figs 5303: Fitting Chains. Only made for ``emcee`` runs. Two version of the plot will be saved, one including the burn in steps and one without the burn in steps.
 
    Fig 5304: *(Demo figure to come)* Zoomed-in Figure Emphasizing Phase Variations Using Temporally Binned Data Over Unbinned Data.
+
+   .. figure:: ../media/S5_out/fig5309_ch00_harmonica_string_emcee.png
+      :alt: Stage 5 Harmonica transmission string
+
+   Fig 5309: Harmonica transmission string. The blue solid line depicts the measured shape of the planet.  Any deviation from the reference circle (gray dashed line) points to a non-spherical planet.  The morning limb is on the right; the evening limb is on the left.
 
    - If ``isplots_S5`` = 5, and if ``emcee`` or ``dynesty`` were used as the fitter: ``Eureka!`` will plot a corner plot for each channel.
 
