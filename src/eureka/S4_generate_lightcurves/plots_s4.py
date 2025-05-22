@@ -87,9 +87,9 @@ def binned_lightcurve(meta, log, lc, i, white=False):
                      fmt='.', color=f'C{i}', mec=f'C{i}', alpha=0.1)
 
         nbins = int(len(times)/100)
-        binned_time = util.binData_time(times, times, nbins)
-        binned_flux = util.binData_time(lcpoints, times, nbins)
-        binned_unc = util.binData_time(err, times, nbins, err=True)
+        binned_time = util.binData_time(times, times, nbin=nbins)
+        binned_flux = util.binData_time(lcpoints, times, nbin=nbins)
+        binned_unc = util.binData_time(err, times, nbin=nbins, err=True)
         plt.errorbar(binned_time, binned_flux, yerr=binned_unc, fmt='o', markersize=3, color=f'C{i}', markeredgecolor='k', ecolor='k', elinewidth=2, zorder=1000) # this is bad and hard-coded; will need to modify for spectral case
 
         mad = util.get_mad_1d(norm_lcdata)
@@ -173,6 +173,14 @@ def binned_background(meta, log, lc, i, white=False):
     else:
         plt.errorbar(lc.time.values-time_modifier, norm_bgdata, norm_bgerr,
                      fmt='o', color=f'C{i}', mec=f'C{i}', alpha=0.2)
+
+        nbins = int(len(lc.time.values)/100)
+        binned_time_bg = util.binData_time(lc.time.values, lc.time.values, nbin=nbins)
+        binned_flux_bg = util.binData_time(norm_bgdata, lc.time.values, nbin=nbins)
+        binned_unc_bg = util.binData_time(norm_bgerr, lc.time.values, nbin=nbins, err=True)
+        plt.errorbar(binned_time_bg-time_modifier, binned_flux_bg, yerr=binned_unc_bg, fmt='o', markersize=3, color=f'C{i}', markeredgecolor='k', ecolor='k', elinewidth=2, zorder=1000) # this is bad and hard-coded; will need to modify for spectral case
+
+        
         mad = util.get_mad_1d(norm_bgdata)
         meta.mad_s4_binned.append(mad)
         # log.writelog(f'    MAD = {np.round(mad).astype(int)} ppm')
