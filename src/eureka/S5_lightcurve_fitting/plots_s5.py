@@ -94,15 +94,12 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
             time = lc.time
             new_timet = new_time
 
+        normflux = flux/model_sys - gp
         residuals = flux - model_lc
 
         # Get binned data and times
         if not meta.nbin_plot or meta.nbin_plot > len(time):
-            binned_time = time
-            binned_flux = flux
-            binned_unc = unc
-            binned_normflux = flux/model_sys - gp
-            binned_res = residuals
+             overplot_binned = False
         else:
             nbin_plot = meta.nbin_plot
             binned_time = util.binData_time(time, time, nbin=nbin_plot)
@@ -111,13 +108,17 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
             binned_normflux = util.binData_time(flux/model_sys - gp, time,
                                                 nbin=nbin_plot)
             binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
+            binned_color = plots.darken_color(color)
+            overplot_binned = True
 
         fig = plt.figure(5101, figsize=(8, 6))
         plt.clf()
 
         ax = fig.subplots(3, 1)
-        ax[0].errorbar(binned_time, binned_flux, yerr=binned_unc, fmt='.',
-                       color='w', ecolor=color, mec=color)
+        ax[0].errorbar(time, flux, yerr=unc, fmt='.', color=color, alpha=0.1)
+        if overplot_binned:
+            ax[0].errorbar(binned_time, binned_flux, yerr=binned_unc, fmt='.',
+                           color='w', ecolor=binned_color, mec=binned_color)
         ax[0].plot(time, model_lc, '.', ls='', ms=1, color='0.3', zorder=10)
         if isTitle:
             ax[0].set_title(f'{meta.eventlabel} - Channel {channel} - '
@@ -125,14 +126,18 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
         ax[0].set_ylabel('Normalized Flux', size=14)
         ax[0].set_xticks([])
 
-        ax[1].errorbar(binned_time, binned_normflux, yerr=binned_unc, fmt='.',
-                       color='w', ecolor=color, mec=color)
+        ax[1].errorbar(time, normflux, yerr=unc, fmt='.', color=color, alpha=0.1)
+        if overplot_binned:
+            ax[1].errorbar(binned_time, binned_normflux, yerr=binned_unc, fmt='.',
+                           color='w', ecolor=binned_color, mec=binned_color)
         ax[1].plot(new_timet, model_phys, color='0.3', zorder=10)
         ax[1].set_ylabel('Calibrated Flux', size=14)
         ax[1].set_xticks([])
 
-        ax[2].errorbar(binned_time, binned_res*1e6, yerr=binned_unc*1e6,
-                       fmt='.', color='w', ecolor=color, mec=color)
+        ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.', color=color, alpha=0.1)        
+        if overplot_binned:
+            ax[2].errorbar(binned_time, binned_res*1e6, yerr=binned_unc*1e6,
+                           fmt='.', color='w', ecolor=binned_color, mec=binned_color)
         ax[2].axhline(0, color='0.3', zorder=10)
         ax[2].set_ylabel('Residuals (ppm)', size=14)
         ax[2].set_xlabel(str(lc.time_units), size=14)

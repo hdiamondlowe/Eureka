@@ -90,11 +90,13 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
     meta.run_s5 = None
     for spec_hw_val in meta.spec_hw_range:
         for bg_hw_val in meta.bg_hw_range:
-            if not isinstance(bg_hw_val, str):
+            if not isinstance(bg_hw_val, str) and meta.expand>1:
                 # Only divide if value is not a string (spectroscopic modes)
                 bg_hw_val //= meta.expand
+            if meta.photometry and meta.phot_method=="photutils": ap = spec_hw_val
+            else: ap = spec_hw_val//meta.expand
             meta.run_s5 = util.makedirectory(meta, 'S5', meta.run_s5,
-                                             ap=spec_hw_val//meta.expand,
+                                             ap=ap,
                                              bg=bg_hw_val)
 
     for spec_hw_val in meta.spec_hw_range:
@@ -153,10 +155,12 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                     lc_whites.append(lc_hold)
 
             # Directory structure should not use expanded HW values
-            spec_hw_val //= meta.expand
+            #   (Also see note above about meta.expand and photometry)
+            if meta.expand>1: spec_hw_val //= meta.expand
             if not isinstance(bg_hw_val, str):
                 # Only divide if value is not a string (spectroscopic modes)
-                bg_hw_val //= meta.expand
+                if meta.expand>1: bg_hw_val //= meta.expand
+                    
             # Get the directory for Stage 5 processing outputs
             meta.outputdir = util.pathdirectory(meta, 'S5', meta.run_s5,
                                                 ap=spec_hw_val,
@@ -225,6 +229,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                     centroid_param_list.append(
                         np.ma.zeros(lc.time.values.shape))
             xpos, xwidth, ypos, ywidth = centroid_param_list
+            #at this stage these values are still in their originals, and match l4 lcdata
 
             # make citations for current stage
             util.make_citations(meta, 5)
@@ -442,7 +447,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                     "_Meta_Save"), save=[])
             else:
                 for channel in range(chanrng):
-                    log.writelog(f"\nStarting Channel {channel} of "
+                    log.writelog(f"\nStarting Channel {channel+1} of "
                                  f"{chanrng}\n")
 
                     # Get the flux and error measurements for
@@ -1181,12 +1186,20 @@ def load_specific_s4_meta_info(meta):
     """
     inputdir = os.sep.join(meta.inputdir.split(os.sep)[:-2]) + os.sep
     # Get directory containing S4 outputs for this aperture pair
-    if not isinstance(meta.bg_hw, str):
+    inputdir = os.sep.join(meta.inputdir.split(os.sep)[:-2]) + os.sep
+    if not isinstance(meta.bg_hw, str) and meta.expand>1:
         # Only divide if value is not a string (spectroscopic modes)
+        # If not a string, only need to do this if expand is greater than 1
         bg_hw = meta.bg_hw//meta.expand
     else:
         bg_hw = meta.bg_hw
-    inputdir += f'ap{meta.spec_hw//meta.expand}_bg{bg_hw}'+os.sep
+    if meta.photometry and meta.phot_method=="photutils": 
+        spec_hw = meta.spec_hw
+    else:
+        spec_hw = meta.spec_hw//meta.expand
+    # [HDL] The above conditionals are a little messy because they are basically two ways of doing the same thing
+    #     but I'm trying not to indadvertently break something for another mode. Maybe its' too sloppy though.
+    inputdir += f'ap{spec_hw}_bg{bg_hw}'+os.sep
     # Locate the old MetaClass savefile, and load new ECF into
     # that old MetaClass
     meta.inputdir = inputdir

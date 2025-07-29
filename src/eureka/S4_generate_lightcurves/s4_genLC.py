@@ -650,6 +650,10 @@ def genlc(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
                     lc['spam_nonlin_4para_white'] = (['wavelength', 'spam_4'],
                                                      ld_coeffs_w[3])
 
+            lc['normdata'], lc['normerr'] = util.normalize_spectrum(
+                meta, lc['data'][i], lc['err'][i], 
+                scandir=getattr(lc, 'scandir', None))
+                
             log.writelog('Saving results...')
 
             event_ap_bg = (meta.eventlabel + "_ap" + str(spec_hw_val) + '_bg'

@@ -1,5 +1,6 @@
 import matplotlib
 from matplotlib import rcdefaults, rcParams
+import matplotlib.colors as mcolors
 
 # Default figure file type
 figure_filetype = '.png'
@@ -96,3 +97,14 @@ def set_rc(style='preserve', usetex=False, layout='constrained',
     # Update the figure filetype
     global figure_filetype
     figure_filetype = filetype
+
+def darken_color(color, amount=0.5):
+    """
+    Darkens the given color by multiplying (1 - amount) to each RGB channel.
+    amount=0 means no change, amount=1 means black.
+    """
+    try:
+        c = mcolors.to_rgb(color)
+    except ValueError:
+        raise ValueError(f"Invalid color: {color}")
+    return tuple((1 - amount) * channel for channel in c)
