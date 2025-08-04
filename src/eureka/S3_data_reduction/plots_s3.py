@@ -815,7 +815,7 @@ def phot_centroid(data, meta):
     """
     plt.figure(3109)
     plt.clf()
-    fig, ax = plt.subplots(4, 1, num=3019, figsize=(10, 6), sharex=True,
+    fig, ax = plt.subplots(5, 1, num=3019, figsize=(10, 6), sharex=True,
                            gridspec_kw={'left':0.1, 'right':0.77, 'hspace':0.05})
     plt.suptitle('Centroid positions over time')
 
@@ -827,7 +827,9 @@ def phot_centroid(data, meta):
     csx_rms = np.sqrt(np.nanmean((csx - np.nanmedian(csx)) ** 2))
     csy = data.centroid_sy.values
     csy_rms = np.sqrt(np.nanmean((csy - np.nanmedian(csy)) ** 2))
-
+    cxy = data.centroid_xy.values
+    cxy_rms = np.sqrt(np.nanmean((cxy - np.nanmedian(cxy)) ** 2))
+    
     ax[0].plot(data.time, data.centroid_x-np.nanmean(data.centroid_x),
                label=r'$\sigma$x = {0:.4f} pxls'.format(cx_rms))
     ax[0].axhline(y=0, linestyle=':', c='r')
@@ -850,8 +852,14 @@ def phot_centroid(data, meta):
                label=r'$\sigma$sy = {0:.4f} pxls'.format(csy_rms))
     ax[3].axhline(y=0, linestyle=':', c='r')
     ax[3].set_ylabel('Delta sy')
-    ax[3].set_xlabel('Time')
     ax[3].legend(bbox_to_anchor=(1.03, 0.5), loc=6)
+
+    ax[4].plot(data.time, data.centroid_xy-np.nanmean(data.centroid_xy),
+               label=r'$\sigma$xy = {0:.4f} pxls'.format(cxy_rms))
+    ax[4].axhline(y=0, linestyle=':', c='r')
+    ax[4].set_ylabel('Delta xy')
+    ax[4].set_xlabel('Time')
+    ax[4].legend(bbox_to_anchor=(1.03, 0.5), loc=6)
 
     fig.get_layout_engine().set(hspace=0.02)
     fig.align_ylabels()

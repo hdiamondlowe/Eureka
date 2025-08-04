@@ -298,6 +298,8 @@ def genlc(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
             if hasattr(spec, 'centroid_sx'):
                 # centroid_x already measured in 2D in S3 - setup to add 1D fit
                 lc['centroid_sx'] = spec.centroid_sx
+            if hasattr(spec, 'centroid_xy'):
+                lc['centroid_xy'] = spec.centroid_xy
             elif meta.recordDrift or meta.correctDrift:
                 # Setup the centroid_x array
                 lc['centroid_x'] = (['time'], np.zeros(meta.n_int))
@@ -650,9 +652,14 @@ def genlc(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
                     lc['spam_nonlin_4para_white'] = (['wavelength', 'spam_4'],
                                                      ld_coeffs_w[3])
 
-            lc['normdata'], lc['normerr'] = util.normalize_spectrum(
+            normadata, normerr = util.normalize_spectrum(
                 meta, lc['data'][i], lc['err'][i], 
                 scandir=getattr(lc, 'scandir', None))
+
+            lc['normdata'] = (('time'), normadata)
+            lc['normerr']  = (('time'), normerr)
+
+            print("TEST S4, what is lc", lc.keys())
                 
             log.writelog('Saving results...')
 

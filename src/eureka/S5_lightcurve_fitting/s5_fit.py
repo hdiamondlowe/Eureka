@@ -204,6 +204,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                         meta.nints[p] = len(lc_whites[p].time.values)
                 else:
                     meta, lc, log = util.manual_clip(lc, meta, log)
+                    print("TEST S5, what is lc", lc.keys())
 
             # Subtract off the user provided time value to avoid floating
             # point precision problems when fitting for values like t0
@@ -220,7 +221,8 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
             # Collect the covariates for potential decorrelation
             centroid_param_list = []
             for centroid_param in ['centroid_x', 'centroid_sx',
-                                   'centroid_y', 'centroid_sy']:
+                                   'centroid_y', 'centroid_sy',
+                                   'centroid_xy']:
                 if hasattr(lc, centroid_param):
                     centroid_param_list.append(
                         np.ma.masked_invalid(
@@ -228,7 +230,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                 else:
                     centroid_param_list.append(
                         np.ma.zeros(lc.time.values.shape))
-            xpos, xwidth, ypos, ywidth = centroid_param_list
+            xpos, xwidth, ypos, ywidth, xy_pos = centroid_param_list
             #at this stage these values are still in their originals, and match l4 lcdata
 
             # make citations for current stage
@@ -285,7 +287,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                            longparamlist, time_units,
                                            paramtitles, freenames, 1,
                                            ld_coeffs, xpos, ypos,
-                                           xwidth, ywidth, True)
+                                           xwidth, ywidth, xy_pos, True)
 
                 # Save results
                 log.writelog('Saving results', mute=(not meta.verbose))
@@ -353,6 +355,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                 ypos = np.ma.masked_array([])
                 xwidth = np.ma.masked_array([])
                 ywidth = np.ma.masked_array([])
+                xy_pos = np.ma.masked_array([])
 
                 for pi in range(len(meta.inputdirlist)+1):
                     mask = lc_whites[pi].mask.values[0, :]
@@ -393,18 +396,25 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                         ywidth_temp = np.ma.masked_where(mask, ywidth_temp)
                     else:
                         ywidth_temp = None
+                    if hasattr(lc_whites[pi], 'centroid_xy'):
+                        xy_pos_temp = np.ma.masked_invalid(
+                            lc_whites[pi].centroid_xy.values)
+                        xy_pos_temp = np.ma.masked_where(mask, xy_pos_temp)
+                    else:
+                        xy_pos_temp = None
 
                     xpos = np.ma.append(xpos, xpos_temp)
                     ypos = np.ma.append(ypos, ypos_temp)
                     xwidth = np.ma.append(xwidth, xwidth_temp)
                     ywidth = np.ma.append(ywidth, ywidth_temp)
+                    xy_pos = np.ma.append(xy_pos, xy_pos_temp)
 
                 meta, params = fit_channel(meta, time, flux, 0, flux_err,
                                            eventlabel, params, log,
                                            longparamlist, time_units,
                                            paramtitles, freenames, chanrng,
                                            ld_coeffs, xpos, ypos,
-                                           xwidth, ywidth)
+                                           xwidth, ywidth, xy_pos)
 
                 # Save results
                 log.writelog('Saving results')
@@ -439,7 +449,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                            longparamlist, time_units,
                                            paramtitles, freenames, chanrng,
                                            ld_coeffs, xpos, ypos,
-                                           xwidth, ywidth)
+                                           xwidth, ywidth, xy_pos)
 
                 # Save results
                 log.writelog('Saving results')
@@ -470,7 +480,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                                log, longparamlist, time_units,
                                                paramtitles, freenames, chanrng,
                                                ld_coeffs, xpos, ypos,
-                                               xwidth, ywidth)
+                                               xwidth, ywidth, xy_pos)
 
                     # Save results
                     log.writelog('Saving results', mute=(not meta.verbose))
@@ -488,7 +498,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
 
 def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                 log, longparamlist, time_units, paramtitles, freenames,
-                chanrng, ldcoeffs, xpos, ypos, xwidth, ywidth, white=False):
+                chanrng, ldcoeffs, xpos, ypos, xwidth, ywidth, xy_pos, white=False):
     """Run a fit for one channel or perform a shared fit.
 
     Parameters
@@ -941,6 +951,19 @@ def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                                fitted_channels=fitted_channels,
                                paramtitles=paramtitles,
                                axis='ywidth', centroid=ywidth,
+                               multwhite=lc_model.multwhite,
+                               nints=lc_model.nints)
+        modellist.append(t_cent)
+    if 'xy_pos' in meta.run_myfuncs:
+        t_cent = CentroidModel(parameters=params, fmt='r--',
+                               log=log, time=time, time_units=time_units,
+                               freenames=freenames,
+                               longparamlist=lc_model.longparamlist,
+                               nchannel=chanrng,
+                               nchannel_fitted=nchannel_fitted,
+                               fitted_channels=fitted_channels,
+                               paramtitles=paramtitles,
+                               axis='xy_pos', centroid=xy_pos,
                                multwhite=lc_model.multwhite,
                                nints=lc_model.nints)
         modellist.append(t_cent)

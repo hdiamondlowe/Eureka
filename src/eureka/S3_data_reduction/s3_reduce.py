@@ -526,7 +526,6 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                             # Do fgc fit to each whole frame
                             data = centerdriver.centerdriver('fgc_pri', data,
                                                              meta, i)
-
                     if meta.oneoverf_corr is not None:
                         message = '  Correcting for 1/f noise'
                         log.writelog(message+'...', mute=True)
@@ -583,6 +582,9 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                         else:
                             raise ValueError('Unknown phot_method '
                                              f'"{meta.phot_method}"')
+                    
+                    # save xypos relative to movement axis
+                    data['centroid_xy'] = (('time'), centerdriver.xypos(data, meta))
 
                 # plot tilt events
                 if meta.isplots_S3 >= 5 and meta.inst == 'nircam' and \
