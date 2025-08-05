@@ -116,7 +116,6 @@ def _set_style():
     if backend is not None:
         matplotlib.use(backend)
 
-<<<<<<< HEAD
     # Update the figure filetype
     global figure_filetype
     figure_filetype = filetype
@@ -131,7 +130,6 @@ def darken_color(color, amount=0.5):
     except ValueError:
         raise ValueError(f"Invalid color: {color}")
     return tuple((1 - amount) * channel for channel in c)
-=======
 
 def apply_style(func):
     """Decorator to apply the current or default Eureka matplotlib style."""
