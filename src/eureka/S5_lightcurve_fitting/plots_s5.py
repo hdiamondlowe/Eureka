@@ -105,8 +105,7 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
             binned_time = util.binData_time(time, time, nbin=nbin_plot)
             binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
             binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
-            binned_normflux = util.binData_time(flux/model_sys - gp, time,
-                                                nbin=nbin_plot)
+            binned_normflux = util.binData_time(normflux, time, nbin=nbin_plot)
             binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
             binned_color = plots.darken_color(color)
             overplot_binned = True
@@ -710,12 +709,29 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
             time = lc.time
 
         residuals = flux - model_lc
+
+        if not meta.nbin_plot or meta.nbin_plot > len(time):
+             overplot_binned = False
+        else:
+            nbin_plot = meta.nbin_plot
+            binned_time = util.binData_time(time, time, nbin=nbin_plot)
+            binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
+            binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
+            #binned_normflux = util.binData_time(flux/model_sys - gp, time,
+            #                                    nbin=nbin_plot)
+            binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
+            binned_color = plots.darken_color(color)
+            overplot_binned = True
+
         fig = plt.figure(5102, figsize=(8, 6))
         plt.clf()
         ax = fig.subplots(3, 1)
-        ax[0].errorbar(time, flux, yerr=unc, fmt='.', color='w',
-                       ecolor=color, mec=color)
-        ax[0].plot(time, model_lc, '.', ls='', ms=2, color='0.3',
+        ax[0].errorbar(time, flux, yerr=unc, fmt='.', color=color, alpha=0.1)
+        if overplot_binned:
+            ax[0].errorbar(binned_time, binned_flux, yerr=binned_unc, 
+                           fmt='.', color='w', ecolor=binned_color, mec=binned_color)
+        
+        ax[0].plot(time, model_lc, '.', ls='', ms=1, color='0.3',
                    zorder=10)
         if isTitle:
             ax[0].set_title(f'{meta.eventlabel} - Channel {channel} - '
@@ -723,12 +739,15 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
         ax[0].set_ylabel('Normalized Flux', size=14)
         ax[0].set_xticks([])
 
-        ax[1].plot(time, model_GP_component*1e6, '.', color=color)
+        ax[1].plot(time, model_GP_component*1e6, '.', color=color, alpha=0.3)
         ax[1].set_ylabel('GP Term (ppm)', size=14)
         ax[1].set_xticks([])
 
-        ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.',
-                       color='w', ecolor=color, mec=color)
+        ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.', 
+                       color=color, mec=color, alpha=0.1)
+        if overplot_binned:
+            ax[2].errorbar(binned_time, binned_res*1e6, yerr-binned_unc*1e6, 
+                           fmt='.', color='w', ecolor=binned_color, mec=binned_color)
         ax[2].axhline(0, color='0.3', zorder=10)
         ax[2].set_ylabel('Residuals (ppm)', size=14)
         ax[2].set_xlabel(str(lc.time_units), size=14)

@@ -569,7 +569,7 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                         data = inst.flag_bg_phot(data, meta, log)
 
                     # Calculate flux in aperture and subtract background flux
-                    log.writelog('  Doing photometric extraction...',
+                    log.writelog(f'  Doing photometric extraction using method {meta.phot_method}...',
                                  mute=(not meta.verbose))
                     for i in range(len(data.time)):
                         if meta.phot_method == 'optimal':

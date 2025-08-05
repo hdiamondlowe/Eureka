@@ -156,7 +156,7 @@ def xypos(data, meta, i=None, m=None):
     # Fit
     result = minimize(nll, x0=[0.8, 0.0], method='L-BFGS-B')
     m, b = result.x[0], result.x[1]
-    print(m, b)
+    #print(m, b)
 
     #get the midpoint
     x_mid = np.mean(x)

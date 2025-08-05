@@ -658,8 +658,6 @@ def genlc(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
 
             lc['normdata'] = (('time'), normadata)
             lc['normerr']  = (('time'), normerr)
-
-            print("TEST S4, what is lc", lc.keys())
                 
             log.writelog('Saving results...')
 

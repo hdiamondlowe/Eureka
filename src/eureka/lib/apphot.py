@@ -399,13 +399,15 @@ def optphot(data, meta, i, saved_photometric_profile):
     else:
         position = [np.median(data.centroid_x.values),
                     np.median(data.centroid_y.values)]
-
+      
     if saved_photometric_profile is None:
         profile = np.ma.masked_invalid(data.medflux.values)
         xpx = np.arange(profile.shape[1])
         ypx = np.arange(profile.shape[0])
         xpx, ypx = np.meshgrid(xpx, ypx)
         if meta.aperture_edge == 'center':
+            if meta.aperture_shape == 'circle': 
+                meta.photap_b = meta.photap
             xpx_scaled, ypx_scaled = transform_pixels(
                 xpx, ypx, position, meta.photap, meta.photap_b,
                 meta.photap_theta)
@@ -420,7 +422,10 @@ def optphot(data, meta, i, saved_photometric_profile):
                                  'or "rectangle", but got '
                                  f'{meta.aperture_shape}')
         elif meta.aperture_edge == 'exact':
-            if meta.aperture_shape in ['circle', 'ellipse']:
+            if meta.aperture_shape == 'circle':
+                meta.photap_b = meta.photap
+                overlap_func = circle_overlap
+            elif meta.aperture_shape == 'ellipse':
                 overlap_func = circle_overlap
             elif meta.aperture_shape == 'rectangle':
                 overlap_func = rectangle_overlap

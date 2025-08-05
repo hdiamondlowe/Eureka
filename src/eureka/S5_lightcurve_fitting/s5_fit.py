@@ -204,7 +204,6 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                         meta.nints[p] = len(lc_whites[p].time.values)
                 else:
                     meta, lc, log = util.manual_clip(lc, meta, log)
-                    print("TEST S5, what is lc", lc.keys())
 
             # Subtract off the user provided time value to avoid floating
             # point precision problems when fitting for values like t0
