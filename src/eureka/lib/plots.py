@@ -149,4 +149,3 @@ def get_filetype():
         The file extension to use when saving plots, such as '.png' or '.pdf'.
     """
     return _current_style["filetype"]
->>>>>>> upstream/main
