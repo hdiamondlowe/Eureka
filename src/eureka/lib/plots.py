@@ -1,12 +1,9 @@
 import os
 import matplotlib
 from matplotlib import rcdefaults, rcParams
-<<<<<<< HEAD
 import matplotlib.colors as mcolors
-=======
 from functools import wraps
 import matplotlib.pyplot as plt
->>>>>>> upstream/main
 
 # Global configuration dictionary (used by decorator and set_rc)
 _current_style = {
