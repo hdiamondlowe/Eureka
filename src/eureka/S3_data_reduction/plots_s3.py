@@ -791,17 +791,11 @@ def phot_centroid(data, meta):
     meta : eureka.lib.readECF.MetaClass
         The metadata object.
     """
-<<<<<<< HEAD
-    plt.figure(3109)
-    plt.clf()
-    fig, ax = plt.subplots(5, 1, num=3019, figsize=(10, 6), sharex=True,
-                           gridspec_kw={'left':0.1, 'right':0.77, 'hspace':0.05})
-=======
     fig = plt.figure(3109)
     fig.set_size_inches(10, 6, forward=True)
     fig.clf()
-    ax = fig.subplots(4, 1, sharex=True)
->>>>>>> upstream/main
+    ax = fig.subplots(5, 1, sharex=True)
+
     plt.suptitle('Centroid positions over time')
 
     cx = data.centroid_x.values
