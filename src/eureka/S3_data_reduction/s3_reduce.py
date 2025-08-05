@@ -62,6 +62,8 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
 
     Returns
     -------
+    spec : xarray.Dataset
+        The xarray Dataset containing the time-series of 1D spectra.
     meta : eureka.lib.readECF.MetaClass
         The metadata object with attributes added by S3.
     '''
@@ -123,16 +125,9 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
     for spec_hw_val in meta.spec_hw_range:
         for bg_hw_val in meta.bg_hw_range:
             meta.eventlabel = eventlabel
-            if not isinstance(bg_hw_val, str):
-                # Only divide if value is not a string (spectroscopic modes)
-                if isinstance(bg_hw_val, float):
-                    bg_hw_val /= meta.expand
-                else:
-                    bg_hw_val //= meta.expand
-            if isinstance(spec_hw_val, float):
-                spec_hw_val /= meta.expand
-            else:
-                spec_hw_val //= meta.expand
+            # Directory structure should not use expanded HW values
+            spec_hw_val, bg_hw_val = util.get_unexpanded_hws(
+                meta.expand, spec_hw_val, bg_hw_val)
             meta.run_s3 = util.makedirectory(meta, 'S3', meta.run_s3,
                                              ap=spec_hw_val, bg=bg_hw_val)
 
@@ -145,16 +140,8 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
             meta.spec_hw = spec_hw_val
             meta.bg_hw = bg_hw_val
             # Directory structure should not use expanded HW values
-            if isinstance(spec_hw_val, float):
-                spec_hw_val /= meta.expand
-            else:
-                spec_hw_val //= meta.expand
-            if not isinstance(bg_hw_val, str):
-                # Only divide if value is not a string (spectroscopic modes)
-                if isinstance(bg_hw_val, float):
-                    bg_hw_val /= meta.expand
-                else:
-                    bg_hw_val //= meta.expand
+            spec_hw_val, bg_hw_val = util.get_unexpanded_hws(
+                meta.expand, spec_hw_val, bg_hw_val)
             meta.outputdir = util.pathdirectory(meta, 'S3', meta.run_s3,
                                                 ap=spec_hw_val,
                                                 bg=bg_hw_val)
@@ -331,8 +318,7 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                 # https://jwst-pipeline.readthedocs.io/en/latest/jwst/references_general/references_general.html#data-quality-flags
                 # Odd numbers in DQ array are bad pixels. Do not use.
                 if meta.dqmask:
-                    dqmask = np.where(data.dq.values % 2 == 1)
-                    data.mask.values[dqmask] = True
+                    data.mask.values[data.dq.values % 2 == 1] = True
 
                 # Manually mask regions [colstart, colend, rowstart, rowend]
                 if meta.manmask is not None:
@@ -397,11 +383,10 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                                      'curved and may benefit from setting '
                                      'meta.curvature to "correct".')
 
-                    # Perform outlier rejection of
-                    # sky background along time axis
+                    # Perform outlier rejection of bg pix along time axis
                     meta.bg_y2 = meta.src_ypos + meta.bg_hw + 1
                     meta.bg_y1 = meta.src_ypos - meta.bg_hw
-                    if not meta.ff_outlier:
+                    if not meta.ff_outlier and not meta.skip_bg:
                         data = inst.flag_bg(data, meta, log)
 
                     # Do the background subtraction

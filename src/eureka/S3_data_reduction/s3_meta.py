@@ -29,14 +29,18 @@ class S3MetaClass(MetaClass):
             Any additional parameters to be loaded into the MetaClass after
             the ECF has been read in
         '''
+        # Remove the stage from kwargs if present
+        if 'stage' in kwargs:
+            kwargs.pop('stage')
+
         super().__init__(folder, file, eventlabel, stage=3, **kwargs)
+
+        # Set a default data file suffix
+        self.suffix = getattr(self, 'suffix', 'calints')
 
     def set_defaults(self):
         '''Set Stage 3 specific defaults for generic instruments.
         '''
-        # Data file suffix
-        self.suffix = getattr(self, 'suffix', 'calints')
-
         # Make sure the inst, filt, and src_ypos attributes are at
         # least initialized
         self.inst = getattr(self, 'inst', None)
@@ -148,6 +152,7 @@ class S3MetaClass(MetaClass):
         self.curvature = getattr(self, 'curvature', None)
 
         # Background parameters
+        self.skip_bg = getattr(self, 'skip_bg', False)
         self.bg_hw = getattr(self, 'bg_hw')  # Require this parameter to be set
         self.bg_deg = getattr(self, 'bg_deg', 0)
         self.bg_row_by_row = getattr(self, 'bg_row_by_row', False)
@@ -249,6 +254,9 @@ class S3MetaClass(MetaClass):
         '''Set Stage 3 specific defaults for MIRI.
         '''
         self.set_spectral_defaults()
+        self.isrotate = 2
+        self.bg_dir = 'CxC'
+        self.bg_row_by_row = False
 
     def set_NIRCam_defaults(self):
         '''Set Stage 3 specific defaults for NIRCam.
@@ -275,7 +283,9 @@ class S3MetaClass(MetaClass):
         self.curvature = getattr(self, 'curvature', True)
         self.src_ypos = getattr(self, 'src_ypos', [35, 80])
         self.orders = getattr(self, 'orders', [1, 2])
+        self.all_orders = getattr(self, 'all_orders', [1, 2])
         self.record_ypos = getattr(self, 'record_ypos', False)
+        self.trace_offset = getattr(self, 'trace_offset', None)
 
         self.set_spectral_defaults()
 
