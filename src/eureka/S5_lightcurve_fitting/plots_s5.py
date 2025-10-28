@@ -703,7 +703,7 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
         ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.', 
                        color=color, mec=color, alpha=0.1)
         if overplot_binned:
-            ax[2].errorbar(binned_time, binned_res*1e6, yerr-binned_unc*1e6, 
+            ax[2].errorbar(binned_time, binned_res*1e6, yerr=binned_unc*1e6, 
                            fmt='.', color='w', ecolor=binned_color, mec=binned_color)
         ax[2].axhline(0, color='0.3', zorder=10)
         ax[2].set_ylabel('Residuals (ppm)', size=14)

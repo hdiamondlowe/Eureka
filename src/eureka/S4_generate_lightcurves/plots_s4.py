@@ -7,7 +7,6 @@ import warnings
 warnings.filterwarnings("ignore", message='Ignoring specified arguments in '
                                           'this call because figure with num')
 
-
 @plots.apply_style
 def binned_lightcurve(meta, log, lc, i, white=False):
     '''Plot each spectroscopic light curve. (Figs 4102)

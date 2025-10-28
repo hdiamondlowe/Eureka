@@ -32,7 +32,6 @@ from ..lib import util
 from ..lib import clipping
 from ..version import version
 
-
 def genlc(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
     '''Compute photometric flux over specified range of wavelengths.
 

@@ -113,10 +113,6 @@ def _set_style():
     if backend is not None:
         matplotlib.use(backend)
 
-    # Update the figure filetype
-    global figure_filetype
-    figure_filetype = filetype
-
 def darken_color(color, amount=0.5):
     """
     Darkens the given color by multiplying (1 - amount) to each RGB channel.

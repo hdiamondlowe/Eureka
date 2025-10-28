@@ -2,7 +2,6 @@ import numpy as np
 from glob import glob
 from ..lib.readECF import MetaClass
 
-
 class S4MetaClass(MetaClass):
     '''A class to hold Eureka! S4 metadata.
 
