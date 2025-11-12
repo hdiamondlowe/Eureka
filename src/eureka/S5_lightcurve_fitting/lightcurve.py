@@ -215,6 +215,8 @@ class LightCurve(m.Model):
             fig.clf()
             # Draw the data
             ax = fig.gca()
+            #ax.errorbar(time, flux, unc, fmt='.', color=self.colors[i],
+            #                zorder=0, alpha=0.1)
             ax.errorbar(binned_time, binned_flux, binned_unc, fmt='.',
                         color=self.colors[i], zorder=0)
 
@@ -257,9 +259,9 @@ class LightCurve(m.Model):
                 # Draw the data
                 ax = fig.gca()
                 ax.errorbar(time, flux, unc, fmt='.', color=self.colors[i],
-                            zorder=0, alpha=0.1)
-                ax.errorbar(binned_time, binned_flux, binned_unc, fmt='.',
-                            color=self.colors[i], zorder=1)
+                            zorder=0, alpha=0.1)    
+                ax.errorbar(binned_time, binned_flux, binned_unc, fmt='o',
+                            markerfacecolor='white', markeredgecolor='k', ecolor='k', zorder=1)
 
                 # Make a new color generator for the models
                 plot_COLORS = color_gen("Greys", 6)
