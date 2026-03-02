@@ -1480,7 +1480,7 @@ def get_bounds(x, y=None):
     ----------
     x : 1D array
         Pixel indices along x axis.
-    y : 1D array, optional
+    y : 1D array; optional
         Pixel indices along y axis.
 
     Returns
@@ -1489,9 +1489,9 @@ def get_bounds(x, y=None):
         Minimum x bound
     xmax
         Maximum x bound
-    ymin, optional
+    ymin; optional
         Minimum y bound
-    ymax, optional
+    ymax; optional
         Maximum y bound
 
     """
