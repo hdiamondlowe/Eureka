@@ -135,7 +135,7 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
                            fmt='.', color='w', ecolor=binned_color, mec=binned_color)
         ax[2].axhline(0, color='0.3', zorder=10)
         ax[2].set_ylabel('Residuals (ppm)', size=14)
-        ax[2].set_xlabel(str(lc.time_units), size=14)
+        ax[2].set_xlabel(lc.time_units[i] if isinstance(lc.time_units, list) else lc.time_units, size=14)
 
         fig.get_layout_engine().set(hspace=0, h_pad=0)
         fig.align_ylabels(ax)
@@ -242,7 +242,7 @@ def plot_phase_variations(lc, model, meta, fitter, isTitle=True):
             ax.set_title(f'{meta.eventlabel} - Channel {channel} - '
                          f'{fitter}')
         ax.set_ylabel('Normalized Flux - 1 (ppm)', size=14)
-        ax.set_xlabel(str(lc.time_units), size=14)
+        ax.set_xlabel(str(lc.time_units[i] if isinstance(lc.time_units, list) else lc.time_units), size=14)
         fig.patch.set_facecolor('white')
 
         # Plot the binned observations
@@ -707,7 +707,7 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
                            fmt='.', color='w', ecolor=binned_color, mec=binned_color)
         ax[2].axhline(0, color='0.3', zorder=10)
         ax[2].set_ylabel('Residuals (ppm)', size=14)
-        ax[2].set_xlabel(str(lc.time_units), size=14)
+        ax[2].set_xlabel(str(lc.time_units[i] if isinstance(lc.time_units, list) else lc.time_units), size=14)
 
         fig.get_layout_engine().set(hspace=0, h_pad=0)
         fig.align_ylabels(ax)

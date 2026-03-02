@@ -173,15 +173,13 @@ def findevent(meta, stage, allowFail=False):
     # First just check the specific inputdir folder, then check children
     # Check for both old (Meta_Save) and new (SpecData) metadata save files
     fnames = []
-    for file_suffix in ['*_Meta_Save.dat', '*SpecData.h5']:
-        newfnames = glob.glob(meta.inputdir+stage+'_'+meta.eventlabel +
-                              file_suffix)
+    for file_suffix in ['*Meta_Save.dat', '*SpecData.h5']:
+        newfnames = glob.glob(meta.inputdir+stage+'_'+file_suffix)
 
         if len(newfnames) == 0:
             # There were no metadata files in that folder, so let's see if
             # there are in children folders
-            newfnames = glob.glob(meta.inputdir+'**'+os.sep+stage+'_' +
-                                  meta.eventlabel+file_suffix, recursive=True)
+            newfnames = glob.glob(meta.inputdir+'**'+os.sep+stage+'_' +file_suffix, recursive=True)
 
         fnames.extend(newfnames)
 
@@ -215,10 +213,11 @@ def findevent(meta, stage, allowFail=False):
                   f'folder for the metadata file.')
 
         # Prefer Meta_Save if present to support older runs
-        fnames = glob.glob(folder+stage+'_'+meta.eventlabel+'*_Meta_Save.dat')
+        fnames = glob.glob(folder+stage+'_'+'*_Meta_Save.dat')
+
         if len(fnames) == 0:
             # Otherwise, use the SpecData file
-            fnames = glob.glob(folder+stage+'_'+meta.eventlabel+'*SpecData.h5')
+            fnames = glob.glob(folder+stage+'_'+'*SpecData.h5')
         fname = fnames[0]
     else:
         # There was only the one save file found

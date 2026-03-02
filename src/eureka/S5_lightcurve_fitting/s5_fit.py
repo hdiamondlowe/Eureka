@@ -108,6 +108,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                 for p in range(len(meta.inputdirlist)):
                     # Specify where glob should search for the save file
                     path = os.path.join(meta.topdir, meta.inputdirlist[p])
+
                     # Search
                     path = glob(path+os.sep+f'**{os.sep}*LCData.h5',
                                 recursive=True)
@@ -332,6 +333,7 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                 flux = np.ma.masked_array([])
                 flux_err = np.ma.masked_array([])
                 time = np.ma.masked_array([])
+                propagated_time_units = []
                 xpos = np.ma.masked_array([])
                 ypos = np.ma.masked_array([])
                 xwidth = np.ma.masked_array([])
@@ -340,7 +342,16 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
 
                 for pi in range(len(meta.inputdirlist)+1):
                     mask = lc_whites[pi].mask.values[0, :]
-                    time_temp = lc_whites[pi].time.values - offset
+                    if params.time_offset.value != 0:
+                        log.writelog("\nOffset is given, calculating time offset to all white light curves assuming a circular orbit, for plotting purposes only.\n")
+                        propagated_n = int(np.round(np.mean(lc_whites[pi].time.values - offset)/params.per.value))
+                        propagated_offset = offset + propagated_n * params.per.value
+                        propagated_offset = np.round(propagated_offset, decimals=6)
+                        propagated_time_units.append(lc_whites[pi].data.attrs['time_units']+f' - {propagated_offset}')
+                    else:
+                        propagated_offset = offset
+                        propagated_time_units.append(time_units)
+                    time_temp = lc_whites[pi].time.values - propagated_offset
                     time_temp = np.ma.masked_where(mask, time_temp)
                     flux_temp = np.ma.masked_where(
                         mask, lc_whites[pi].data.values[0, :])
@@ -390,9 +401,10 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                     ywidth = np.ma.append(ywidth, ywidth_temp)
                     xy_pos = np.ma.append(xy_pos, xy_pos_temp)
 
+                log.writelog(f"\nOffsets: {propagated_time_units}\n")
                 meta, params = fit_channel(meta, time, flux, 0, flux_err,
                                            eventlabel, params, log,
-                                           longparamlist, time_units,
+                                           longparamlist, propagated_time_units,
                                            paramtitles, freenames, chanrng,
                                            ld_coeffs, xpos, ypos,
                                            xwidth, ywidth, xy_pos)

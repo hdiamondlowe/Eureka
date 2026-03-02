@@ -8,6 +8,7 @@ import h5py
 import xarray as xr
 from astraeus import xarrayIO as xrio
 import time as time_pkg
+import pickle
 
 from scipy.optimize import minimize
 import lmfit
@@ -953,7 +954,7 @@ def dynestyfitter(lc, model, meta, log, **kwargs):
                                     lc.nchannel_fitted)
 
     # Save the fit ASAP so plotting errors don't make you lose everything
-    save_fit(meta, lc, model, fittername, t_results, freenames, samples)
+    save_fit(meta, lc, model, fittername, t_results, freenames, samples, res)
 
     # Final log-likelihood
     end_lnprob = lnprob(fit_params, lc, model, prior1, prior2, priortype,
@@ -1300,7 +1301,7 @@ def load_old_fitparams(lc, meta, log, freenames, fitter):
     return oldfitparam
 
 
-def save_fit(meta, lc, model, fitter, results_table, freenames, samples=[]):
+def save_fit(meta, lc, model, fitter, results_table, freenames, samples=[], dynesty_res=None):
     """Save a fit as a txt file as well as the entire chain if provided.
 
     Parameters
@@ -1336,11 +1337,28 @@ def save_fit(meta, lc, model, fitter, results_table, freenames, samples=[]):
     # Save the chain from the sampler using Astraeus (if a chain was provided)
     if len(samples) != 0:
         fname = meta.outputdir+f'S5_{fitter}_samples{channel_tag}.h5'
-        ds = dict([(freenames[i], xr.DataArray(samples[:, i], dims=['sample'],
-                                               name=freenames[i]))
+        ds = dict([(freenames[i], xr.DataArray(samples[:, i], dims=['sample'], name=freenames[i]))
                    for i in range(len(freenames))])
         ds = xrio.makeDataset(ds)
         xrio.writeXR(fname, ds)
+
+    if dynesty_res is not None:
+        # Save dynesty sampling info
+        fname = meta.outputdir+f'S5_{fitter}_someinfo{channel_tag}.h5'
+        logl = dynesty_res.logl
+        logzerr = dynesty_res.logzerr
+        logwt = dynesty_res.logwt
+        ds_info = {'logl': xr.DataArray(logl, dims=['niter'], name='logl'),
+                   'logzerr': xr.DataArray(logzerr, dims=['niter'], name='logzerr'),
+                   'logwt': xr.DataArray(logwt, dims=['niter'], name='logwt')
+                 }
+        ds_info = xrio.makeDataset(ds_info)
+        xrio.writeXR(fname, ds_info)
+
+        # for now this is redundant with the h5 file, but pickle the full dynesty results
+        # if don't end up needing all these results, can comment out below. 
+        fname = meta.outputdir+f'S5_{fitter}_allinfo{channel_tag}.pkl'
+        pickle.dump(dynesty_res, open(fname, 'wb'))
 
     # Directory structure should not use expanded HW values
     spec_hw_val, bg_hw_val = util.get_unexpanded_hws(
