@@ -78,6 +78,7 @@ def BGsubtraction(data, meta, log, m, isplots=0, group=None):
                  mute=(not meta.verbose))
     data['bg'] = (list(data.coords.keys()), np.zeros_like(data.flux))
     data['bg'].attrs['flux_units'] = data['flux'].attrs['flux_units']
+
     if meta.ncpu == 1:
         # Only 1 CPU
         iterfn = range(meta.int_start, meta.n_int)

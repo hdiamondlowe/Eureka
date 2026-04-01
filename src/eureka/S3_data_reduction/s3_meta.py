@@ -283,9 +283,12 @@ class S3MetaClass(MetaClass):
         self.curvature = getattr(self, 'curvature', True)
         self.src_ypos = getattr(self, 'src_ypos', [35, 80])
         self.orders = getattr(self, 'orders', [1, 2])
-        self.all_orders = getattr(self, 'all_orders', [1, 2])
+        self.all_orders = getattr(self, 'all_orders', self.orders)
         self.record_ypos = getattr(self, 'record_ypos', False)
         self.trace_offset = getattr(self, 'trace_offset', None)
+        # When calibrated_spectra is True and cutoff is not None,
+        # flux values above the cutoff (in MJy/sr) will be set to zero.
+        self.cutoff = getattr(self, 'cutoff', None)
 
         self.set_spectral_defaults()
 

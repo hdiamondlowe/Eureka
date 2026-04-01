@@ -8,7 +8,8 @@ class CentroidModel(Model):
     """Centroid Model
 
     Linear decorrelation against x position (axis='xpos'), y position
-    (axis='ypos'), x width (axis='xwidth'), or y width (axis='ywidth').
+    (axis='ypos'), x width (axis='xwidth'), y width (axis='ywidth'), 
+    or x-y position (axis='xy_pos').
     """
     def __init__(self, axis, **kwargs):
         """Initialize the centroid model.
@@ -17,7 +18,7 @@ class CentroidModel(Model):
         ----------
         axis : str
             The axis to use for the centroid model. Must be one of
-            'xpos', 'ypos', 'xwidth', or 'ywidth'.
+            'xpos', 'ypos', 'xwidth', 'ywidth', or 'xy_pos'.
         **kwargs : dict
             Additional parameters to pass to
             eureka.S5_lightcurve_fitting.models.Model.__init__().
@@ -25,9 +26,9 @@ class CentroidModel(Model):
             paramtitles, axis, and centroid arguments here.
         """
         # Validate axis kwarg early
-        if axis is None or axis not in ['xpos', 'ypos', 'xwidth', 'ywidth']:
+        if axis is None or axis not in ['xpos', 'ypos', 'xwidth', 'ywidth', 'xy_pos']:
             raise ValueError("CentroidModel requires an 'axis' argument set "
-                             "to 'xpos', 'ypos', 'xwidth', or 'ywidth'.")
+                             "to 'xpos', 'ypos', 'xwidth', 'ywidth', or 'xy_pos'.")
         super().__init__(axis=axis, **kwargs)
         self.name = self.axis
 

@@ -1,5 +1,6 @@
 import os
 import inspect
+import logging
 import time as time_pkg
 from copy import deepcopy
 import numpy as np
@@ -317,7 +318,19 @@ class EurekaSpec2Pipeline(Spec2Pipeline):
         log.writelog('Running the Spec2Pipeline\n')
         # Must call the pipeline in this way to ensure the skip booleans are
         # respected
-        self.run(filename)
+
+        # Enable stpipe logging so pipeline step details are visible
+        stpipe_logger = logging.getLogger('stpipe')
+        stpipe_handler = logging.StreamHandler()
+        stpipe_handler.setFormatter(
+            logging.Formatter('  %(name)s - %(message)s'))
+        stpipe_handler.setLevel(logging.INFO)
+        stpipe_logger.addHandler(stpipe_handler)
+        stpipe_logger.setLevel(logging.INFO)
+        try:
+            self.run(filename)
+        finally:
+            stpipe_logger.removeHandler(stpipe_handler)
 
         # Produce some summary plots if requested
         if not meta.testing_S2 and not self.extract_1d.skip:
@@ -386,6 +399,18 @@ class EurekaImage2Pipeline(Image2Pipeline):
         log.writelog('Running the Image2Pipeline\n')
         # Must call the pipeline in this way to ensure the skip booleans are
         # respected
-        self.run(filename)
+
+        # Enable stpipe logging so pipeline step details are visible
+        stpipe_logger = logging.getLogger('stpipe')
+        stpipe_handler = logging.StreamHandler()
+        stpipe_handler.setFormatter(
+            logging.Formatter('  %(name)s - %(message)s'))
+        stpipe_handler.setLevel(logging.INFO)
+        stpipe_logger.addHandler(stpipe_handler)
+        stpipe_logger.setLevel(logging.INFO)
+        try:
+            self.run(filename)
+        finally:
+            stpipe_logger.removeHandler(stpipe_handler)
 
         return

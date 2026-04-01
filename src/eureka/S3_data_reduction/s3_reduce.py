@@ -347,9 +347,14 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                         data = inst.get_wave(data, meta, log)
 
                     if meta.calibrated_spectra:
-                        # Instrument-specific steps for generating
-                        # calibrated stellar spectra
-                        data = inst.calibrated_spectra(data, meta, log)
+                        if meta.inst != 'niriss':
+                            # For non-NIRISS instruments, apply photometric
+                            # calibration to 2D data before extraction
+                            # (S2 photom already converted to MJy)
+                            data = inst.calibrated_spectra(data, meta, log)
+                        # For NIRISS, calibration is applied after
+                        # extraction (see below) because NIRISS SOSS
+                        # S2 data is in DN/s
                     else:
                         # Convert flux units to electrons
                         # (eg. MJy/sr -> DN -> Electrons)
@@ -422,6 +427,12 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                                                                apdata, apmask,
                                                                apbg, apv0,
                                                                apmedflux, m=m)
+
+                    # For NIRISS, apply photometric calibration after
+                    # extraction (NIRISS SOSS S2 data is in DN/s, and
+                    # the JWST pipeline applies photom after extract_1d)
+                    if meta.calibrated_spectra and meta.inst == 'niriss':
+                        data = inst.calibrated_spectra(data, meta, log)
 
                     # Plot results
                     if meta.isplots_S3 >= 3:

@@ -29,6 +29,7 @@ def GLBS(input_model, log, meta):
     log.writelog('Running Group Level Background Subtraction.')
 
     all_data = input_model.data
+
     dq = input_model.groupdq
 
     meta.inst = input_model.meta.instrument.name.lower()
@@ -60,6 +61,7 @@ def GLBS(input_model, log, meta):
                                            time_units='n/a', name='flux')
         data['mask'] = (['time', 'y', 'x'], grp_mask)
         data.attrs['intstart'] = meta.intstart
+
         meta.bg_dir = 'CxC'
         meta.skip_bg = False
         if meta.inst == 'miri':
@@ -75,6 +77,7 @@ def GLBS(input_model, log, meta):
             isplots_S1 = meta.isplots_S1
         else:
             isplots_S1 = 0
+
         data = bkg.BGsubtraction(data, meta, log, meta.m, isplots_S1,
                                  group=ngrp)
 

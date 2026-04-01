@@ -1,4 +1,5 @@
 import os
+import logging
 import time as time_pkg
 import numpy as np
 from copy import deepcopy
@@ -224,6 +225,17 @@ class EurekaS1Pipeline(Detector1Pipeline):
                     meta.default_ramp_fit_custom_exponents
 
         # Run Stage 1
-        self.run(filename)
+        # Enable stpipe logging so pipeline step details are visible
+        stpipe_logger = logging.getLogger('stpipe')
+        stpipe_handler = logging.StreamHandler()
+        stpipe_handler.setFormatter(
+            logging.Formatter('  %(name)s - %(message)s'))
+        stpipe_handler.setLevel(logging.INFO)
+        stpipe_logger.addHandler(stpipe_handler)
+        stpipe_logger.setLevel(logging.INFO)
+        try:
+            self.run(filename)
+        finally:
+            stpipe_logger.removeHandler(stpipe_handler)
 
         return

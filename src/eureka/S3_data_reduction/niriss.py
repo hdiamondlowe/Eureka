@@ -10,11 +10,10 @@ from .background import fitbg
 
 __all__ = ['read', 'get_wave', 'straighten_trace', 'flag_ff', 'flag_bg',
            'clean_median_flux', 'fit_bg', 'cut_aperture', 'standard_spectrum',
-           'residualBackground', 'lc_nodriftcorr']
+           'calibrated_spectra', 'residualBackground', 'lc_nodriftcorr']
 
 '''
 TODO:
-    Implement niriss.calibrated_spectra()
     0th-order masking using F277W filter
     Get 2D MAD calculation working
 '''
@@ -82,7 +81,7 @@ def read(filename, data, meta, log):
     # Duplicate science arrays for each order to be analyzed
     if isinstance(meta.orders, int):
         meta.orders = [meta.orders]
-    norders = len(meta.all_orders)
+    norders = len(meta.orders) #len(meta.all_orders)
     sci = np.repeat(sci[:, :, :, np.newaxis], norders, axis=3)
     err = np.repeat(err[:, :, :, np.newaxis], norders, axis=3)
     dq = np.repeat(dq[:, :, :, np.newaxis], norders, axis=3)
@@ -95,13 +94,13 @@ def read(filename, data, meta, log):
         meta.ywindow[1] *= meta.expand
 
     data['flux'] = xrio.makeFluxLikeDA(sci, time, flux_units, time_units,
-                                       name='flux', order=meta.all_orders)
+                                       name='flux', order=meta.orders)
     data['err'] = xrio.makeFluxLikeDA(err, time, flux_units, time_units,
-                                      name='err', order=meta.all_orders)
+                                      name='err', order=meta.orders)
     data['dq'] = xrio.makeFluxLikeDA(dq, time, "None", time_units,
-                                     name='dq', order=meta.all_orders)
+                                     name='dq', order=meta.orders)
     data['v0'] = xrio.makeFluxLikeDA(v0, time, flux_units, time_units,
-                                     name='v0', order=meta.all_orders)
+                                     name='v0', order=meta.orders)
 
     # Initialize bad pixel mask (False = good, True = bad)
     data['mask'] = (['time', 'y', 'x', 'order'], np.zeros(data.flux.shape,
@@ -133,7 +132,7 @@ def get_wave(data, meta, log):
     log.writelog(f"  The NIRISS pupil position is {pwcpos:3f} degrees",
                  mute=(not meta.verbose))
 
-    norders = len(meta.all_orders)
+    norders = len(meta.orders)
     data['trace'] = (['x', 'order'],
                      np.zeros((data.x.shape[0], norders)) +
                      np.array(meta.src_ypos)[np.newaxis])
@@ -141,7 +140,7 @@ def get_wave(data, meta, log):
                        np.zeros((data.x.shape[0], norders))*np.nan)
     data['wave_1d'].attrs['wave_units'] = 'microns'
 
-    for order in meta.all_orders:
+    for order in meta.orders:
         # Get trace for the given order and pupil position
         trace = get_soss_traces(pwcpos=pwcpos, order=str(order), interp=True)
         if data.attrs['mhdr']['SUBARRAY'] == 'SUBSTRIP96' and \
@@ -408,6 +407,7 @@ def fit_bg(dataim, datamask, n, meta, isplots=0):
     norders = len(meta.orders)
     bg = np.zeros_like(dataim)
     mask = np.zeros_like(dataim, dtype=bool)
+
     for k in range(norders):
         bg[:, :, k], mask[:, :, k] = fitbg(
             dataim[:, :, k], meta, datamask[:, :, k],
@@ -500,6 +500,116 @@ def standard_spectrum(data, meta, apdata, apmask, aperr):
     """
 
     return nircam.standard_spectrum(data, meta, apdata, apmask, aperr)
+
+
+def calibrated_spectra(data, meta, log):
+    """Apply photometric calibration to convert NIRISS SOSS extracted
+    spectra from DN/s to mJy.
+
+    For NIRISS SOSS, the JWST Stage 2 pipeline does not apply photometric
+    calibration to the 2D images (photom is only applied after extract_1d
+    in the standard pipeline). This function is called after Eureka's own
+    spectral extraction and applies the wavelength-dependent conversion
+    to the 1D spectra: flux_mJy = flux_DN_per_s * photmj * relresponse(lambda) * 1e3.
+
+    Parameters
+    ----------
+    data : Xarray Dataset
+        The Dataset object containing extracted spectra (optspec, opterr,
+        stdspec, stdvar).
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object.
+    log : logedit.Logedit
+        The current log.
+
+    Returns
+    -------
+    data : Xarray Dataset
+        The updated Dataset object with extracted spectra in mJy.
+    """
+    log.writelog('  Applying NIRISS SOSS photometric calibration to '
+                 'extracted spectra...', mute=(not meta.verbose))
+
+    # Get the photom reference file
+    if meta.photfile is not None:
+        photom_file = meta.photfile
+    else:
+        from .bright2flux import retrieve_ancil
+        log.writelog("  Looking up NIRISS SOSS photom reference file...",
+                     mute=(not meta.verbose))
+        photom_file = retrieve_ancil(data.attrs['filename'], 'photom')
+
+    log.writelog(f"  Using photom reference: {photom_file}",
+                 mute=(not meta.verbose))
+
+    # Get FILTER and PUPIL from the FITS header
+    filt = data.attrs['mhdr']['FILTER']
+    pupil = data.attrs['mhdr']['PUPIL']
+
+    # Read the photom reference table and apply per-order conversion
+    with fits.open(photom_file) as hdul:
+        phot_table = hdul['PHOTOM'].data
+
+        for order in meta.orders:
+            # Find the matching row by FILTER, PUPIL, ORDER
+            mask = ((phot_table['filter'] == filt) &
+                    (phot_table['pupil'] == pupil) &
+                    (phot_table['order'] == order))
+
+            if not np.any(mask):
+                log.writelog(f"  WARNING: No photom match for "
+                             f"FILTER={filt}, PUPIL={pupil}, ORDER={order}")
+                continue
+
+            row = phot_table[mask][0]
+            photmj = row['photmj']       # scalar: Jy / (DN/s)
+            nelem = row['nelem']
+            ref_waves = row['wavelength'][:nelem].copy()
+            ref_relresps = row['relresponse'][:nelem].copy()
+
+            # Ensure wavelengths are in increasing order for interp
+            if not np.all(np.diff(ref_waves) > 0):
+                sort_idx = np.argsort(ref_waves)
+                ref_waves = ref_waves[sort_idx]
+                ref_relresps = ref_relresps[sort_idx]
+
+            # Convert from meters to microns if needed (matching JWST
+            # photom.py convention)
+            if ref_waves.max() > 0 and ref_waves.max() < 1e-4:
+                ref_waves *= 1e6
+
+            # Interpolate relresponse onto the data wavelength grid
+            wave_1d = data.wave_1d.sel(order=order).values  # microns
+            valid = ~np.isnan(wave_1d)
+            conv_1d = np.full_like(wave_1d, np.nan)
+            conv_1d[valid] = np.interp(
+                wave_1d[valid], ref_waves, ref_relresps,
+                left=np.nan, right=np.nan)
+
+            # Full conversion: photmj * relresponse * 1e3 -> mJy / (DN/s)
+            conversion = photmj * conv_1d * 1e3
+            no_cal = np.isnan(conversion)
+            conversion[no_cal] = 0.0
+
+            log.writelog(
+                f"    Order {order}: photmj={photmj:.4e} Jy/(DN/s), "
+                f"calibrated {np.sum(~no_cal)}/{len(conv_1d)} pixels",
+                mute=(not meta.verbose))
+
+            # Apply 1D conversion [x] to extracted spectra [time, x]
+            conv_2d = conversion[np.newaxis, :]
+            data['optspec'].sel(order=order).values[:] *= conv_2d
+            data['opterr'].sel(order=order).values[:] *= conv_2d
+            data['stdspec'].sel(order=order).values[:] *= conv_2d
+            data['stdvar'].sel(order=order).values[:] *= conversion**2
+
+    # Update units on extracted spectra
+    data['optspec'].attrs['flux_units'] = 'mJy'
+    data['opterr'].attrs['flux_units'] = 'mJy'
+    data['stdspec'].attrs['flux_units'] = 'mJy'
+    data['stdvar'].attrs['flux_units'] = 'mJy^2'
+
+    return data
 
 
 def residualBackground(data, meta, m, vmin=None, vmax=None):

@@ -465,7 +465,9 @@ def emceefitter(lc, model, meta, log, **kwargs):
                          freenames, fitter='emcee', burnin=False)
 
     if meta.isplots_S5 >= 5:
-        plots.plot_corner(samples, lc, meta, freenames, fitter='emcee')
+        plots.plot_corner(samples, lc, meta, freenames, fitter='emcee',
+                          prior1=prior1, prior2=prior2,
+                          priortype=priortype)
 
     # Make a new model instance
     best_model = copy.deepcopy(model)
@@ -1020,7 +1022,9 @@ def dynestyfitter(lc, model, meta, log, **kwargs):
 
     # plot using corner.py
     if meta.isplots_S5 >= 5:
-        plots.plot_corner(samples, lc, meta, freenames, fitter=fittername)
+        plots.plot_corner(samples, lc, meta, freenames, fitter=fittername,
+                          prior1=prior1, prior2=prior2,
+                          priortype=priortype)
 
     # Make a new model instance
     best_model = copy.deepcopy(model)

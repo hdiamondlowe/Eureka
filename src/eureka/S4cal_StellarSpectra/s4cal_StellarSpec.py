@@ -96,6 +96,16 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
     log.writelog(f"Time range: {np.min(spec.time.values)} " +
                  f"- {np.max(spec.time.values)}")
 
+    # Handle NIRISS order dimension: squeeze single-order data to 1D/2D
+    if wave.ndim == 2:
+        if wave.shape[1] == 1:
+            log.writelog("  Squeezing single-order dimension from data...",
+                         mute=(not meta.verbose))
+            wave = wave[:, 0]
+        else:
+            raise NotImplementedError(
+                "S4cal does not yet support multiple spectral orders.")
+
     # Flag outliers in time
     if meta.photometry:
         mask = sigrej(spec.aplev.values, meta.sigma_thresh)
@@ -104,15 +114,34 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
         wave_units = spec.wave_1d.wave_units
         time_units = spec.aplev.time_units
     else:
-        mask = sigrej(spec.optspec.values, meta.sigma_thresh,
-                      mask=spec.optmask.values, axis=0)
-        optspec = np.ma.masked_array(spec.optspec.values, mask)
+        optspec_vals = spec.optspec.values
+        optmask_vals = spec.optmask.values
+        if optspec_vals.ndim == 3 and optspec_vals.shape[2] == 1:
+            optspec_vals = optspec_vals[:, :, 0]
+            optmask_vals = optmask_vals[:, :, 0]
+        mask = sigrej(optspec_vals, meta.sigma_thresh,
+                      mask=optmask_vals, axis=0)
+        optspec = np.ma.masked_array(optspec_vals, mask)
         flux_units = spec.optspec.flux_units
         wave_units = spec.optspec.wave_units
         time_units = spec.optspec.time_units
 
     # Apply aperture correction
     optspec *= meta.apcorr
+
+    # Filter out NaN wavelengths (e.g. NIRISS pixels outside valid trace)
+    valid_wave = ~np.isnan(wave)
+    if not np.all(valid_wave):
+        log.writelog(f"  Filtering {np.sum(~valid_wave)} pixels with "
+                     f"NaN wavelengths...", mute=(not meta.verbose))
+        wave = wave[valid_wave]
+        optspec = optspec[:, valid_wave]
+
+    # Ensure wavelengths are monotonically increasing (required by splrep;
+    # NIRISS SOSS wavelengths decrease with pixel index)
+    if len(wave) > 1 and wave[0] > wave[-1]:
+        wave = wave[::-1]
+        optspec = optspec[:, ::-1]
 
     if isinstance(meta.t0, float):
         meta.t0 = [meta.t0]
@@ -130,7 +159,7 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
 
         # This code snippet will automatically make sure t0 is within
         # the current observation window
-        nOrbits = (np.mean(spec.time.data)-t0) // p + 1
+        nOrbits = round((np.mean(spec.time.data) - t0) / p)
         t0 += nOrbits*p
 
         # total occultation duration

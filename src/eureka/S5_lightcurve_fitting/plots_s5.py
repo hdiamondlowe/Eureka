@@ -412,7 +412,8 @@ def plot_rms(lc, model, meta, fitter):
 
 
 @plots.apply_style
-def plot_corner(samples, lc, meta, freenames, fitter):
+def plot_corner(samples, lc, meta, freenames, fitter,
+                prior1=None, prior2=None, priortype=None):
     """Plot a corner plot. (Figs 5501)
 
     Parameters
@@ -427,6 +428,15 @@ def plot_corner(samples, lc, meta, freenames, fitter):
         The metadata object.
     fitter : str
         The name of the fitter (for plot filename).
+    prior1 : ndarray; optional
+        The lower-bound for uniform/log-uniform priors, or mean for
+        normal priors. Defaults to None.
+    prior2 : ndarray; optional
+        The upper-bound for uniform/log-uniform priors, or std. dev. for
+        normal priors. Defaults to None.
+    priortype : ndarray; optional
+        Keywords indicating the type of prior for each free parameter
+        ('U', 'LU', or 'N'). Defaults to None.
     """
     ndim = len(freenames)+1  # One extra for the 1D histogram
 
@@ -448,6 +458,52 @@ def plot_corner(samples, lc, meta, freenames, fitter):
                         title_fmt='.3', title_kwargs={"fontsize": 10},
                         label_kwargs={"fontsize": 10}, fontsize=10,
                         labelpad=0.25)
+
+    # Overlay prior distributions on the diagonal (1D histogram) panels
+    if prior1 is not None and prior2 is not None and priortype is not None:
+        nparams = len(freenames)
+        for i in range(nparams):
+            # corner 2.x creates an NxN grid of axes
+            ax = fig.axes[i * nparams + i]
+            xmin, xmax = ax.get_xlim()
+            ymin, ymax = ax.get_ylim()
+            x = np.linspace(xmin, xmax, 1000)
+
+            if priortype[i] == 'U':
+                if np.isinf(prior1[i]) or np.isinf(prior2[i]):
+                    continue
+                pdf = np.where((x >= prior1[i]) & (x <= prior2[i]),
+                               1.0 / (prior2[i] - prior1[i]), 0.0)
+            elif priortype[i] == 'LU':
+                if np.isinf(prior1[i]) or np.isinf(prior2[i]):
+                    continue
+                xsafe = np.maximum(x, 1e-300)
+                pdf = np.where(
+                    (np.log(xsafe) >= prior1[i]) &
+                    (np.log(xsafe) <= prior2[i]),
+                    1.0 / (xsafe * (prior2[i] - prior1[i])),
+                    0.0
+                )
+            elif priortype[i] == 'N':
+                pdf = stats.norm.pdf(x, loc=prior1[i], scale=prior2[i])
+            else:
+                continue
+
+            if np.max(pdf) > 0:
+                pdf_scaled = pdf / np.max(pdf) * ymax * 0.9
+                ax.plot(x, pdf_scaled, color='C0', lw=2, alpha=0.8)
+                # Vertical dotted line at the prior central value
+                if priortype[i] == 'N':
+                    center = prior1[i]
+                elif priortype[i] in ('U', 'LU'):
+                    center = (prior1[i] + prior2[i]) / 2.0
+                else:
+                    center = None
+                if center is not None:
+                    ax.axvline(center, color='C0', lw=2, alpha=0.8,
+                               ls='dotted')
+                ax.set_xlim(xmin, xmax)
+                ax.set_ylim(ymin, ymax)
 
     if lc.white:
         fname_tag = 'white'
