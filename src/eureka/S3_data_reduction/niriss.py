@@ -92,6 +92,7 @@ def read(filename, data, meta, log):
         # Only apply super-sampling expansion once
         meta.ywindow[0] *= meta.expand
         meta.ywindow[1] *= meta.expand
+        meta.src_ypos = [p * meta.expand for p in meta.src_ypos]
 
     data['flux'] = xrio.makeFluxLikeDA(sci, time, flux_units, time_units,
                                        name='flux', order=meta.orders)
@@ -154,6 +155,8 @@ def get_wave(data, meta, log):
             log.writelog(f"  Shifting trace by {meta.trace_offset} pixels "
                          f"for {subarray} and Order {order}.",
                          mute=(not meta.verbose))
+        # Scale trace positions to the super-sampled pixel grid
+        trace.y *= meta.expand
         # Assign trace and wavelength for given order
         ind1 = np.nonzero(np.in1d(trace.x, data.x.values))[0]
         ind2 = np.nonzero(np.in1d(data.x.values, trace.x))[0]

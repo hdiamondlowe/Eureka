@@ -96,6 +96,40 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
     log.writelog(f"Time range: {np.min(spec.time.values)} " +
                  f"- {np.max(spec.time.values)}")
 
+    # Compute raw white LC from ALL integrations before clipping.
+    # Storing this now means kept and removed points are drawn from the
+    # same data, so the displayed light curve is identical regardless of
+    # whether clipping is active.
+    if meta.photometry:
+        lc_all_raw = spec.aplev.values.ravel().astype(float)
+    else:
+        lc_all_raw_vals = spec.optspec.values
+        if lc_all_raw_vals.ndim == 3 and lc_all_raw_vals.shape[2] == 1:
+            lc_all_raw_vals = lc_all_raw_vals[:, :, 0]
+        lc_all_raw = np.nansum(lc_all_raw_vals, axis=1).astype(float)
+    meta.s4cal_plot_all_times = spec.time.values.copy()
+    meta.s4cal_plot_lc_all = lc_all_raw
+
+    # Manually clip specified integrations if requested
+    meta.manual_clip_removed_times = None
+    n_ints_all = len(spec.time)
+    kept_mask = np.ones(n_ints_all, dtype=bool)
+    if meta.manual_clip is not None and len(meta.manual_clip) > 0:
+        log.writelog('Manually clipping integrations...',
+                     mute=(not meta.verbose))
+        manual_clip = np.array(meta.manual_clip)
+        if len(manual_clip.shape) == 1:
+            # The user provided a single range; reshape to list-of-lists
+            manual_clip = manual_clip[np.newaxis]
+        for inds in manual_clip:
+            kept_mask[inds[0]:inds[1]] = False
+        time_inds = np.arange(n_ints_all)[kept_mask]
+        spec = spec.isel(time=time_inds)
+        log.writelog(f'  Removed {np.sum(~kept_mask)} of {n_ints_all} '
+                     f'integrations')
+        meta.manual_clip_removed_times = meta.s4cal_plot_all_times[~kept_mask]
+    meta.s4cal_plot_kept_mask = kept_mask
+
     # Handle NIRISS order dimension: squeeze single-order data to 1D/2D
     if wave.ndim == 2:
         if wave.shape[1] == 1:

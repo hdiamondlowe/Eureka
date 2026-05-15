@@ -698,6 +698,10 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
     model_GP = model.GPeval(model_eval)
     model_with_GP = model_eval + model_GP
 
+    # Per-kernel GP decomposition and per-systematic-model components
+    gp_components = model.GPeval_per_kernel(model_eval)
+    sys_components = model.syseval_per_component()
+
     for i, channel in enumerate(lc.fitted_channels):
         flux = deepcopy(lc.flux)
         unc = deepcopy(lc.unc_fit)
@@ -705,17 +709,35 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
         model_GP_component = deepcopy(model_GP)
         color = lc.colors[i]
 
+        # Deep-copy per-kernel and per-sys arrays for splitting
+        gp_comp_chan = {name: deepcopy(arr)
+                       for name, arr in gp_components.items()}
+        sys_comp_chan = {name: deepcopy(arr)
+                        for name, arr in sys_components.items()}
+
         if lc.share and not meta.multwhite:
             time = lc.time
             # Split the arrays that have lengths of the original time axis
             flux, unc, model_lc, model_GP_component = \
                 split([flux, unc, model_lc, model_GP_component],
                       meta.nints, channel)
+            for name in gp_comp_chan:
+                gp_comp_chan[name] = split([gp_comp_chan[name]],
+                                          meta.nints, channel)[0]
+            for name in sys_comp_chan:
+                sys_comp_chan[name] = split([sys_comp_chan[name]],
+                                           meta.nints, channel)[0]
         elif meta.multwhite:
             # Split the arrays that have lengths of the original time axis
             time, flux, unc, model_lc, model_GP_component = \
                 split([lc.time, flux, unc, model_lc, model_GP_component],
                       meta.nints, channel)
+            for name in gp_comp_chan:
+                gp_comp_chan[name] = split([gp_comp_chan[name]],
+                                          meta.nints, channel)[0]
+            for name in sys_comp_chan:
+                sys_comp_chan[name] = split([sys_comp_chan[name]],
+                                           meta.nints, channel)[0]
         else:
             time = lc.time
 
@@ -728,8 +750,6 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
             binned_time = util.binData_time(time, time, nbin=nbin_plot)
             binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
             binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
-            #binned_normflux = util.binData_time(flux/model_sys - gp, time,
-            #                                    nbin=nbin_plot)
             binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
             binned_color = plots.darken_color(color)
             overplot_binned = True
@@ -752,9 +772,48 @@ def plot_GP_components(lc, model, meta, fitter, isTitle=True):
         ax[0].set_ylabel('Normalized Flux', size=14)
         ax[0].set_xticks([])
 
-        ax[1].plot(time, model_GP_component*1e6, '.', color=color, alpha=0.3)
-        ax[1].set_ylabel('GP Term (ppm)', size=14)
+        # --- GP components panel ---
+        # Normalize each component to unit std and stack them vertically
+        # so shapes are comparable regardless of amplitude.  The original
+        # amplitude (σ in ppm) is shown in the legend for reference.
+        comp_cmap = plt.get_cmap('tab10')
+        n_gp = len(gp_comp_chan)
+        n_sys = len(sys_comp_chan)
+        n_total = n_gp + n_sys
+        idx = 0
+
+        # Plot individual GP kernel contributions (normalized to unit std)
+        for name, arr in gp_comp_chan.items():
+            arr_ppm = np.asarray(arr) * 1e6
+            sigma = np.std(arr_ppm)
+            if sigma > 0:
+                arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
+            else:
+                arr_norm = arr_ppm - np.mean(arr_ppm)
+            c = comp_cmap(idx % 10)
+            ax[1].plot(time, arr_norm, '.', ms=2, color=c, alpha=0.4,
+                       label=f'GP: {name} (σ={sigma:.1f} ppm)')
+            idx += 1
+
+        # Plot systematic model deviations (normalized to unit std)
+        for name, arr in sys_comp_chan.items():
+            arr_ppm = (np.asarray(arr) - 1) * 1e6
+            sigma = np.std(arr_ppm)
+            if sigma > 0:
+                arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
+            else:
+                arr_norm = arr_ppm - np.mean(arr_ppm)
+            c = comp_cmap(idx % 10)
+            ax[1].plot(time, arr_norm, '-', lw=2, color=c, alpha=0.8,
+                       label=f'{name} (σ={sigma:.1f} ppm)')
+            idx += 1
+
+        ax[1].axhline(0, color='0.7', lw=0.5, zorder=0)
+        ax[1].set_ylabel('Normalized Components\n(each σ = 1)', size=14)
         ax[1].set_xticks([])
+        if n_total > 0:
+            ax[1].legend(fontsize=8, ncol=max(1, (n_total + 1) // 2),
+                         loc='best', framealpha=0.7, markerscale=3)
 
         ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.', 
                        color=color, mec=color, alpha=0.1)

@@ -611,6 +611,56 @@ class CompositeModel(Model):
                                       **kwargs)
         return flux
 
+    def GPeval_per_kernel(self, fit, channel=None, **kwargs):
+        """Decompose the GP prediction into per-kernel contributions.
+
+        Parameters
+        ----------
+        fit : ndarray
+            The model predictions (excluding the GP).
+        channel : int; optional
+            If not None, only consider one of the channels.
+        **kwargs : dict
+            Must pass in the time array here if not already set.
+
+        Returns
+        -------
+        components : dict
+            ``{kernel_input_name: ndarray}`` with one entry per kernel
+            dimension.  Empty dict if no GP component exists.
+        """
+        for component in self.components:
+            if component.modeltype == 'GP':
+                return component.eval_per_kernel(fit, channel=channel,
+                                                 **kwargs)
+        return {}
+
+    def syseval_per_component(self, channel=None, **kwargs):
+        """Evaluate each systematic model component individually.
+
+        Parameters
+        ----------
+        channel : int; optional
+            If not None, only consider one of the channels.
+        **kwargs : dict
+            Must pass in the time array here if not already set.
+
+        Returns
+        -------
+        components : dict
+            ``{component.name: ndarray}`` for each systematic
+            component.  Values are the raw multiplicative model
+            evaluations.
+        """
+        result = {}
+        for component in self.components:
+            if component.modeltype == 'systematic':
+                if component.time is None:
+                    component.time = self.time
+                result[component.name] = component.eval(channel=channel,
+                                                        **kwargs)
+        return result
+
     def physeval(self, interp=False, channel=None, **kwargs):
         """Evaluate the physical model components only.
 

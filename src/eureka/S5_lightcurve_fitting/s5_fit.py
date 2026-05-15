@@ -966,11 +966,27 @@ def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                                nints=lc_model.nints)
         modellist.append(t_cm)
     if 'GP' in meta.run_myfuncs:
+        # Check for conflicts: a covariate should not be used both as
+        # a GP kernel input and as a linear decorrelation parameter.
+        from .models.GPModel import GP_CENTROID_NAMES
+        gp_centroid_inputs = set(meta.kernel_inputs) & GP_CENTROID_NAMES
+        linear_decorr = set(meta.run_myfuncs) & GP_CENTROID_NAMES
+        overlap = gp_centroid_inputs & linear_decorr
+        if overlap:
+            raise ValueError(
+                f"The following parameter(s) are listed both as GP "
+                f"kernel inputs and as linear decorrelation models in "
+                f"run_myfuncs: {overlap}. Each covariate should only "
+                f"be used once — either in the GP or as a linear "
+                f"decorrelation term, not both."
+            )
+
         t_GP = GPModel(meta.kernel_class, meta.kernel_inputs, lc_model,
                        parameters=params, fmt='r--', log=log,
                        time=time, time_units=time_units,
                        gp_code_name=meta.GP_package,
                        useHODLR=meta.useHODLR,
+                       gp_subsample=meta.gp_subsample,
                        freenames=freenames,
                        longparamlist=lc_model.longparamlist,
                        nchannel=chanrng,
@@ -979,7 +995,22 @@ def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                        wl_groups=meta.wl_groups,
                        paramtitles=paramtitles,
                        multwhite=lc_model.multwhite,
-                       nints=lc_model.nints)
+                       nints=lc_model.nints,
+                       xpos=xpos, ypos=ypos,
+                       xwidth=xwidth, ywidth=ywidth,
+                       xy_pos=xy_pos)
+        # Always log and print which GP backend is used and gp_subsample if present
+        msg = f"GP backend: {meta.GP_package}"
+        if meta.gp_subsample > 1:
+            msg += f" | gp_subsample: {meta.gp_subsample} (only every {meta.gp_subsample}th data point used in likelihood; {len(time)//meta.gp_subsample} points used)"
+        if meta.GP_package == 'tinygp':
+            msg += " | ncpu forced to 1 (JAX/XLA is already multi-threaded; fork+JAX deadlocks)"
+        log.writelog(msg)
+
+        # Print GP parameter suggestions based on actual kernel input data
+        for line in t_GP.gp_param_suggestions():
+            log.writelog(line)
+ 
         modellist.append(t_GP)
 
     # Combine all physical models into an AstroModel

@@ -172,6 +172,16 @@ class S5MetaClass(MetaClass):
         self.kernel_class = getattr(self, 'kernel_class', ['Matern32'])
         self.GP_package = getattr(self, 'GP_package', 'celerite')
         self.useHODLR = getattr(self, 'useHODLR', False)
+        self.gp_subsample = getattr(self, 'gp_subsample', 1)
+        if self.GP_package == 'celerite': self.gp_subsample = 1
+        if self.GP_package == 'tinygp' and self.ncpu > 1:
+            # JAX (used by tinygp) initialises a multi-threaded XLA runtime
+            # on import.  Forking after that deadlocks the worker processes.
+            # XLA already uses all available cores internally, so ncpu > 1
+            # provides no benefit and is forced back to 1.  If you need
+            # process-level parallelism with tinygp, use run_myfuncs with
+            # multiple channels instead.
+            self.ncpu = 1
 
         # Plotting controls
         self.interp = getattr(self, 'interp', True)

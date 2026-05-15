@@ -36,30 +36,94 @@ def plot_whitelc(optspec, time, meta, i, fig=None, ax=None):
     toffset = meta.time_offset
     it0, it1, it2, it3, it4, it5 = meta.it
 
-    # Created binned white LC
-    if meta.photometry:
-        lc = np.ma.copy(optspec)
-    else:
-        lc = np.ma.sum(optspec, axis=1)
-    lc /= np.ma.mean(lc)
+    # Use the pre-computed raw white LC (all integrations, before clipping)
+    # so kept and removed points share the same data and normalization.
+    # The light curve therefore looks identical regardless of clipping —
+    # removed points simply appear in red at their true y-position.
+    lc_all_raw = getattr(meta, 's4cal_plot_lc_all', None)
+    all_plot_times = getattr(meta, 's4cal_plot_all_times', None)
+    kept_mask_plot = getattr(meta, 's4cal_plot_kept_mask',
+                             np.ones(len(time), dtype=bool))
 
-    # Get binned data and times
-    if not meta.nbin_plot or meta.nbin_plot > len(time):
-        lc_bin = lc
-        time_bin = time
+    if lc_all_raw is not None and all_plot_times is not None:
+        lc_all = lc_all_raw / np.nanmean(lc_all_raw)
+        lc_kept = lc_all[kept_mask_plot]
+        time_vals = all_plot_times[kept_mask_plot]
+        has_removed = bool(np.any(~kept_mask_plot))
+        if has_removed:
+            lc_removed = lc_all[~kept_mask_plot]
+            times_removed = all_plot_times[~kept_mask_plot]
+        all_times = all_plot_times
     else:
-        lc_bin = util.binData_time(lc, time, mask=np.ma.getmaskarray(lc),
-                                   nbin=meta.nbin_plot)
-        time_bin = util.binData_time(time, time, mask=np.ma.getmaskarray(lc),
-                                     nbin=meta.nbin_plot)
+        # Fallback for old meta objects
+        if meta.photometry:
+            lc_kept = np.ma.copy(optspec)
+        else:
+            lc_kept = np.ma.sum(optspec, axis=1)
+        lc_kept = np.asarray(lc_kept / np.ma.mean(lc_kept), dtype=float)
+        time_vals = np.array(time)
+        has_removed = False
+        all_times = time_vals
+
+    # Bin both kept and removed data using consistent bin edges
+    do_bin = meta.nbin_plot and meta.nbin_plot < len(time_vals)
+    if do_bin:
+        nbin = meta.nbin_plot
+        bin_edges = np.linspace(np.min(all_times), np.max(all_times), nbin + 1)
+        kept_idx = np.clip(np.digitize(time_vals, bin_edges) - 1, 0, nbin - 1)
+        lc_bin = np.array([
+            np.nanmean(lc_kept[kept_idx == b])
+            if np.any(kept_idx == b) else np.nan
+            for b in range(nbin)
+        ])
+        time_bin = np.array([
+            np.nanmean(time_vals[kept_idx == b])
+            if np.any(kept_idx == b) else np.nan
+            for b in range(nbin)
+        ])
+        lc_bin = np.ma.masked_invalid(lc_bin)
+        time_bin = np.ma.masked_invalid(time_bin)
+        if has_removed:
+            rem_idx = np.clip(
+                np.digitize(times_removed, bin_edges) - 1, 0, nbin - 1)
+            rem_lc_bin = np.array([
+                np.nanmean(lc_removed[rem_idx == b])
+                if np.any(rem_idx == b) else np.nan
+                for b in range(nbin)
+            ])
+            rem_time_bin = np.array([
+                np.nanmean(times_removed[rem_idx == b])
+                if np.any(rem_idx == b) else np.nan
+                for b in range(nbin)
+            ])
+            rem_lc_bin = np.ma.masked_invalid(rem_lc_bin)
+            rem_time_bin = np.ma.masked_invalid(rem_time_bin)
+    else:
+        lc_bin = lc_kept
+        time_bin = time_vals
+        if has_removed:
+            rem_lc_bin = lc_removed
+            rem_time_bin = times_removed
 
     if i == 0:
         fig = plt.figure(4202)
         fig.set_size_inches(8, 5, forward=True)
         fig.clf()
         ax = fig.subplots(1, 1)
-        ax.plot(time_bin-toffset, lc_bin, '.', color='0.2', alpha=0.8,
-                label='Binned White LC')
+        # Grey unbinned background (kept integrations)
+        ax.plot(time_vals - toffset, lc_kept, '.', color='0.5', alpha=0.2,
+                ms=2, zorder=1, rasterized=True)
+        # Faint red unbinned clipped integrations
+        if has_removed:
+            ax.plot(times_removed - toffset, lc_removed, '.', color='red',
+                    alpha=0.2, ms=2, zorder=2, rasterized=True)
+        # Binned kept data on top
+        ax.plot(time_bin - toffset, lc_bin, '.', color='0.2', alpha=0.8,
+                zorder=3, label='Binned White LC')
+        # Binned removed data in red
+        if has_removed:
+            ax.plot(rem_time_bin - toffset, rem_lc_bin, '.', color='red',
+                    alpha=0.8, zorder=3, label='Manually Clipped')
     ymin, ymax = ax.get_ylim()
     ax.fill_betweenx((ymin, ymax), time[it0]-toffset, time[it1]-toffset,
                      color=colors[1], alpha=0.2)

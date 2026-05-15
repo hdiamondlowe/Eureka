@@ -15,11 +15,17 @@ except ModuleNotFoundError:
     tinygp = None
 
 
+# Names that overlap between GP kernel inputs and linear
+# decorrelation models (CentroidModel).  Used to prevent the same
+# covariate being used in both places.
+GP_CENTROID_NAMES = {'xpos', 'ypos', 'xwidth', 'ywidth', 'xy_pos'}
+
+
 class GPModel(Model):
     """Model for Gaussian Process (GP)"""
     def __init__(self, kernel_types, kernel_input_names, lc,
                  gp_code_name='celerite', normalize=False,
-                 useHODLR=False, **kwargs):
+                 useHODLR=False, gp_subsample=None, **kwargs):
         """Initialize the GP model.
 
         Parameters
@@ -27,7 +33,11 @@ class GPModel(Model):
         kernel_types : list[str]
             The types of GP kernels to use (e.g., ['Matern32']).
         kernel_input_names : list[str]
-            Names of GP inputs (currently only 'time' is supported).
+            Names of GP inputs.  Supported names are 'time', 'xpos',
+            'ypos', 'xwidth', and 'ywidth'.  When more than one name
+            is given together with george or tinygp, each kernel
+            operates on the corresponding input dimension and the
+            kernels are summed.
         lc : eureka.S5_lightcurve_fitting.lightcurve
             The current lightcurve object.
         gp_code_name : {'george','celerite','tinygp'}; optional
@@ -42,6 +52,9 @@ class GPModel(Model):
         **kwargs : dict
             Additional parameters to pass to
             eureka.S5_lightcurve_fitting.models.Model.__init__().
+            Centroid vectors (xpos, ypos, xwidth, ywidth) should be
+            passed here when the corresponding name appears in
+            kernel_input_names.
         """
         super().__init__(kernel_types=kernel_types,
                          nkernels=len(kernel_types),
@@ -50,8 +63,12 @@ class GPModel(Model):
                          gp_code_name=gp_code_name, normalize=normalize,
                          useHODLR=useHODLR, fit_lc=np.ma.ones(lc.flux.shape),
                          flux=lc.flux, unc=lc.unc, unc_fit=lc.unc_fit,
+                         gp_subsample=gp_subsample,
                          **kwargs)
         self.name = 'GP'
+
+        # Subsampling factor for tinygp (None or 1 means no subsampling)
+        self.gp_subsample = gp_subsample if gp_subsample is not None else 1
 
         # Define model type (physical, systematic, other)
         self.modeltype = 'GP'
@@ -67,6 +84,14 @@ class GPModel(Model):
                 raise AssertionError(
                     'Our celerite2 implementation currently supports only '
                     'a Matern32 kernel.'
+                )
+            non_time = [n for n in kernel_input_names if n != 'time']
+            if non_time:
+                raise AssertionError(
+                    'celerite2 only supports 1-D (time) GP inputs. '
+                    f'Non-time inputs requested: {non_time}. '
+                    'Use GP_package = tinygp or george for multi-'
+                    'dimensional GP inputs.'
                 )
 
     def update(self, newparams, **kwargs):
@@ -128,31 +153,56 @@ class GPModel(Model):
 
             # Remove poorly handled masked values
             good = ~np.ma.getmaskarray(residuals)
-            unc_good = unc_fit[good]
-            res_good = residuals[good]
-
-            # Build or reuse the GP object
-            if input_gp is None:
-                gp = self.setup_GP(chan)
-            else:
-                gp = input_gp
-                # If caller passed a pre-built GP, we may still need
-                # to the compute the inputs.
-                if self.kernel_inputs is None:
-                    self.setup_inputs()
 
             if self.gp_code_name == 'george':
+                unc_good = unc_fit[good]
+                res_good = residuals[good]
+                if input_gp is None:
+                    gp = self.setup_GP(chan, good=good)
+                else:
+                    gp = input_gp
+                    if self.kernel_inputs is None:
+                        self.setup_inputs()
                 kin = self.kernel_inputs[chan][:, good].T
+                # george requires plain ndarrays, not masked arrays
+                if isinstance(kin, np.ma.MaskedArray):
+                    kin = np.asarray(kin.data)
+                if isinstance(unc_good, np.ma.MaskedArray):
+                    unc_good = np.asarray(unc_good.data)
+                res_good = np.asarray(res_good)
                 gp.compute(kin, unc_good)
                 mu = gp.predict(res_good, kin, return_cov=False)
             elif self.gp_code_name == 'celerite':
+                unc_good = unc_fit[good]
+                res_good = residuals[good]
+                if input_gp is None:
+                    gp = self.setup_GP(chan, good=good)
+                else:
+                    gp = input_gp
+                    if self.kernel_inputs is None:
+                        self.setup_inputs()
                 kin = self.kernel_inputs[chan][0][good]
                 gp.compute(kin, yerr=unc_good)
                 mu = gp.predict(res_good)
             elif self.gp_code_name == 'tinygp':
                 if tinygp is None:
                     raise RuntimeError('tinygp is not available.')
-                cond_gp = gp.condition(res_good, noise=unc_good).gp
+                # For tinygp/JAX, also exclude positions where kernel
+                # inputs are masked (JAX cannot handle masked arrays)
+                if self.kernel_inputs is None:
+                    self.setup_inputs()
+                kin_mask = np.ma.getmaskarray(
+                    self.kernel_inputs[chan]).any(axis=0)
+                good &= ~kin_mask
+                unc_good = unc_fit[good]
+                res_good = residuals[good]
+                if input_gp is None:
+                    gp = self.setup_GP(
+                        chan, good=good,
+                        diag=np.asarray(unc_good)**2)
+                else:
+                    gp = input_gp
+                cond_gp = gp.condition(np.asarray(res_good)).gp
                 mu = cond_gp.loc
             else:
                 raise ValueError(f'Unknown gp_code_name: {self.gp_code_name}')
@@ -167,12 +217,173 @@ class GPModel(Model):
 
         return lcfinal
 
+    def eval_per_kernel(self, fit_lc, channel=None, **kwargs):
+        """Decompose the GP prediction into per-kernel contributions.
+
+        Each kernel component's contribution is computed as
+        ``K_k @ alpha`` where ``alpha = (K_total + sigma^2 I)^{-1} y``
+        and ``K_k`` is the covariance matrix from kernel *k* alone.
+        The sum of all components equals the total GP prediction from
+        :meth:`eval`.
+
+        Parameters
+        ----------
+        fit_lc : ndarray
+            The current (non-GP) model evaluation.
+        channel : int; optional
+            If not None, only consider one of the channels.
+        **kwargs : dict
+            Must include 'time' if self.time is None.
+
+        Returns
+        -------
+        components : dict
+            ``{kernel_input_name: np.ma.MaskedArray}`` with one entry
+            per kernel dimension.  Each array has the same shape as
+            the result of :meth:`eval`.
+        """
+        nchan, channels = self._channels(channel)
+
+        if self.time is None:
+            self.time = kwargs.get('time')
+
+        # Initialise per-kernel result arrays
+        results = {name: np.ma.array([])
+                   for name in self.kernel_input_names}
+
+        for chan in channels:
+            if self.nchannel_fitted > 1:
+                flux, unc_fit = split([self.flux, self.unc_fit],
+                                      self.nints, chan)
+                if nchan > 1:
+                    fit_temp = split([fit_lc, ], self.nints, chan)[0]
+                else:
+                    fit_temp = fit_lc
+            else:
+                flux = self.flux
+                fit_temp = fit_lc
+                unc_fit = self.unc_fit
+
+            residuals = np.ma.masked_invalid(flux - fit_temp)
+            if self.multwhite:
+                time = split([self.time, ], self.nints, chan)[0]
+            else:
+                time = self.time
+            residuals = np.ma.masked_where(time.mask, residuals)
+            good = ~np.ma.getmaskarray(residuals)
+
+            # ----------------------------------------------------------
+            # Backend-specific: solve for alpha then decompose K_k*alpha
+            # ----------------------------------------------------------
+            if self.gp_code_name == 'george':
+                if self.kernel_inputs is None:
+                    self.setup_inputs()
+                unc_good = unc_fit[good]
+                res_good = residuals[good]
+                kin = self.kernel_inputs[chan][:, good].T
+                if isinstance(kin, np.ma.MaskedArray):
+                    kin = np.asarray(kin.data)
+                if isinstance(unc_good, np.ma.MaskedArray):
+                    unc_good = np.asarray(unc_good.data)
+                res_good = np.asarray(res_good)
+
+                gp = self.setup_GP(chan, good=good)
+                gp.compute(kin, unc_good)
+                alpha = gp.solver.apply_inverse(res_good)
+
+                for k in range(self.nkernels):
+                    single_k = self.get_kernel(self.kernel_types[k], k, chan)
+                    K_k = single_k.get_value(kin)
+                    mu_k = K_k @ alpha
+                    mu_full = np.ma.zeros(len(time))
+                    mu_full[good] = mu_k
+                    mu_full = np.ma.masked_where(~good, mu_full)
+                    name = self.kernel_input_names[k]
+                    results[name] = np.ma.append(results[name], mu_full)
+
+            elif self.gp_code_name == 'celerite':
+                # Single kernel — the one component equals the total
+                unc_good = unc_fit[good]
+                res_good = residuals[good]
+                if self.kernel_inputs is None:
+                    self.setup_inputs()
+                kin = self.kernel_inputs[chan][0][good]
+                gp = self.setup_GP(chan, good=good)
+                gp.compute(kin, yerr=unc_good)
+                mu = gp.predict(res_good)
+                mu_full = np.ma.zeros(len(time))
+                mu_full[good] = mu
+                mu_full = np.ma.masked_where(~good, mu_full)
+                name = self.kernel_input_names[0]
+                results[name] = np.ma.append(results[name], mu_full)
+
+            elif self.gp_code_name == 'tinygp':
+                if tinygp is None:
+                    raise RuntimeError('tinygp is not available.')
+                import jax
+                import jax.numpy as jnp
+
+                if self.kernel_inputs is None:
+                    self.setup_inputs()
+                kin_mask = np.ma.getmaskarray(
+                    self.kernel_inputs[chan]).any(axis=0)
+                good &= ~kin_mask
+
+                unc_good = unc_fit[good]
+                res_good = residuals[good]
+                gp = self.setup_GP(
+                    chan, good=good,
+                    diag=np.asarray(unc_good)**2)
+
+                kin = self.kernel_inputs[chan][:, good].T
+                if kin.ndim == 2 and kin.shape[1] == 1:
+                    kin = kin[:, 0]
+                if isinstance(kin, np.ma.MaskedArray):
+                    kin = np.asarray(kin.data)
+                kin_jax = jnp.array(kin)
+                res_jax = jnp.array(np.asarray(res_good))
+                unc_jax = jnp.array(np.asarray(unc_good))
+
+                # Build full covariance and solve for alpha.
+                # Observation noise (unc^2) is now included at
+                # construction time via setup_GP(diag=unc^2), so
+                # replicate that here.
+                K_full = gp.kernel(kin_jax, kin_jax)
+                noise = jnp.diag(unc_jax**2)
+                alpha = jnp.linalg.solve(K_full + noise, res_jax)
+
+                for k in range(self.nkernels):
+                    single_k = self.get_kernel(self.kernel_types[k], k, chan)
+                    K_k = single_k(kin_jax, kin_jax)
+                    mu_k = np.array(K_k @ alpha)
+                    mu_full = np.ma.zeros(len(time))
+                    mu_full[good] = mu_k
+                    mu_full = np.ma.masked_where(~good, mu_full)
+                    name = self.kernel_input_names[k]
+                    results[name] = np.ma.append(results[name], mu_full)
+            else:
+                raise ValueError(
+                    f'Unknown gp_code_name: {self.gp_code_name}')
+
+        return results
+
     def setup_inputs(self):
         """Build kernel input arrays; standardize if requested.
 
-        Currently supports only 'time' as an input dimension. When
-        normalize=True, inputs are standardized to zero mean and unit std.
+        Supported input names are 'time', 'xpos', 'ypos', 'xwidth',
+        and 'ywidth'.  When normalize=True, inputs are standardized to
+        zero mean and unit standard deviation.
         """
+        # Map from input name to the corresponding stored vector.
+        _input_vectors = {
+            'time': self.time,
+            'xpos': getattr(self, 'xpos', None),
+            'ypos': getattr(self, 'ypos', None),
+            'xwidth': getattr(self, 'xwidth', None),
+            'ywidth': getattr(self, 'ywidth', None),
+            'xy_pos': getattr(self, 'xy_pos', None),
+        }
+
         # Store by real channel id to avoid index mismatches.
         self.kernel_inputs = {}
         for chan in self.fitted_channels:
@@ -183,14 +394,15 @@ class GPModel(Model):
 
             kin_chan = np.ma.zeros((0, time.size))
             for name in self.kernel_input_names:
-                if name == 'time':
-                    x = np.ma.copy(self.time)
-                else:
-                    # add more input options here
+                vec = _input_vectors.get(name)
+                if vec is None:
                     raise ValueError(
-                        'Only time-based GPs are currently supported; '
-                        f"received '{name}'."
+                        f"GP kernel input '{name}' is not available. "
+                        f"Supported inputs: {list(_input_vectors.keys())}. "
+                        "Make sure the corresponding vector is passed to "
+                        "GPModel (e.g. via the ECF kernel_inputs setting)."
                     )
+                x = np.ma.copy(vec)
 
                 if self.multwhite:
                     x = split([x, ], self.nints, chan)[0]
@@ -202,13 +414,150 @@ class GPModel(Model):
 
             self.kernel_inputs[chan] = kin_chan
 
-    def setup_GP(self, chan=0):
+    def gp_param_suggestions(self):
+        """Compute suggested GP parameter bounds from the kernel inputs.
+
+        Returns a list of human-readable strings with suggestions for
+        minimum/maximum length scale (``m``) and amplitude (``A``) for
+        each kernel, based on the spacing and range of the actual kernel
+        input data.  Takes ``gp_subsample`` into account when computing
+        the effective point spacing.
+
+        This method must be called after ``setup_inputs()`` has populated
+        ``self.kernel_inputs``.
+
+        Returns
+        -------
+        list of str
+            One string per kernel with suggested parameter bounds.
+        """
+        if self.kernel_inputs is None:
+            self.setup_inputs()
+
+        lines = []
+        lines.append("GP parameter suggestions (based on kernel input data):")
+
+        # Use the first fitted channel for diagnostics
+        chan = self.fitted_channels[0]
+        kin = self.kernel_inputs[chan]  # shape (nkernels, N)
+
+        for k in range(self.nkernels):
+            ki = '' if k == 0 else str(k)
+            name = self.kernel_input_names[k]
+
+            x = np.ma.compressed(kin[k])  # drop masked values
+            N_full = len(x)
+
+            # When subsampling, compute spacing from the actual subsampled
+            # points (every sub-th integration in time order) rather than
+            # multiplying the full-resolution spacing.
+            sub = self.gp_subsample
+            if sub > 1:
+                x_sub = x[::sub]
+            else:
+                x_sub = x
+            N_eff = len(x_sub)
+
+            x_sub_sorted = np.sort(x_sub)
+            dx_sub = np.diff(x_sub_sorted)
+            dx_sub_pos = dx_sub[dx_sub > 0]
+
+            if len(dx_sub_pos) == 0:
+                lines.append(
+                    f"  kernel {k} ({name}): all input values identical "
+                    f"— cannot compute suggestions")
+                continue
+
+            min_spacing = np.min(dx_sub_pos)
+            med_spacing = np.median(dx_sub_pos)
+            total_range = x_sub_sorted[-1] - x_sub_sorted[0]
+
+            # Length-scale suggestions (in log space, as m = log(ℓ))
+            log_ell_min = np.log(min_spacing)
+            log_ell_max = np.log(total_range)
+
+            # Amplitude: estimate the flux variance explained by *this*
+            # kernel input by sorting the (subsampled) flux by the covariate
+            # value, binning it, and computing the variance of the bin means.
+            # This isolates how much the flux changes as a function of each
+            # input independently, giving a per-kernel amplitude estimate
+            # rather than the same total flux scatter for all kernels.
+            flux_full = np.ma.compressed(self.flux)
+            flux_sub = flux_full[::sub] if sub > 1 else flux_full
+            # Trim to same length as x_sub in case flux is longer
+            flux_sub = flux_sub[:N_eff]
+            # Sort both flux and covariate by covariate value
+            sort_idx = np.argsort(x_sub[:N_eff])
+            flux_sorted = flux_sub[sort_idx]
+            # Use ~10 bins (at least 5) to estimate covariate-explained variance
+            n_bins = max(5, N_eff // 10)
+            bins = np.array_split(flux_sorted, n_bins)
+            bin_means = np.array([b.mean() for b in bins if len(b) > 0])
+            amp_estimate = float(np.var(bin_means))
+
+            if amp_estimate > 0:
+                log_A_upper = np.log(amp_estimate)
+            else:
+                # Fallback: total flux variance
+                log_A_upper = np.log(np.var(flux_sub)) if np.var(flux_sub) > 0 else 0.0
+            # Lower bound: 4 orders of magnitude below the upper estimate
+            log_A_lower = log_A_upper - 9.2  # log(1e-4) ≈ -9.2
+
+            lines.append(f"  kernel {k} '{name}' (param: A{ki}, m{ki}):")
+            if sub > 1:
+                lines.append(
+                    f"    gp_subsample = {sub} → {N_full} pts → "
+                    f"{N_eff} effective")
+            else:
+                lines.append(
+                    f"    N = {N_full}")
+            if self.normalize:
+                lines.append(
+                    f"    (inputs are normalized to zero mean, unit std)")
+
+            lines.append(
+                f"    input range:   {x_sub_sorted[0]:.6g} to "
+                f"{x_sub_sorted[-1]:.6g}"
+                f"  (total span = {total_range:.6g})")
+            lines.append(
+                f"    point spacing (subsampled): min = {min_spacing:.6g}, "
+                f"median = {med_spacing:.6g}")
+            lines.append(
+                f"    suggested m{ki} (log length-scale) range: "
+                f"[{log_ell_min:.2f}, {log_ell_max:.2f}]")
+            lines.append(
+                f"      ℓ_min = {np.exp(log_ell_min):.4g} "
+                f"(≈ min spacing; shorter will overfit)")
+            lines.append(
+                f"      ℓ_max = {np.exp(log_ell_max):.4g} "
+                f"(≈ total range; longer will underfit)")
+            lines.append(
+                f"    suggested A{ki} (log amplitude) range: "
+                f"[{log_A_lower:.2f}, {log_A_upper:.2f}]")
+            lines.append(
+                f"      (flux variance explained by '{name}': "
+                f"σ_bins = {np.sqrt(amp_estimate):.4g}; "
+                f"based on bin-mean variance — adjust using residuals)")
+
+        return lines
+
+    def setup_GP(self, chan=0, good=None, diag=None):
         """Construct the GP object for channel index c.
 
         Parameters
         ----------
         chan : int; optional
             The current channel index. Defaults to 0.
+        good : ndarray of bool; optional
+            Mask of valid data points.  Required for tinygp (which
+            needs the training coordinates at construction time).
+            Ignored by george and celerite backends.  Defaults to None
+            (use all points).
+        diag : ndarray; optional
+            Observation noise variance (sigma^2) for each good data
+            point.  Required for tinygp so that observation noise is
+            included in the training covariance; ignored by george
+            and celerite (which add noise via their compute() calls).
 
         Returns
         -------
@@ -235,8 +584,17 @@ class GPModel(Model):
         elif self.gp_code_name == 'tinygp':
             if tinygp is None:
                 raise RuntimeError('tinygp is not available.')
-            gp = tinygp.GaussianProcess(kernel, self.kernel_inputs[chan].T,
-                                        mean=0)
+            kin = self.kernel_inputs[chan][:, good].T if good is not None \
+                else self.kernel_inputs[chan].T  # shape (ngood, nkernels)
+            # For 1-D input, squeeze to (ngood,) for simplicity
+            if kin.ndim == 2 and kin.shape[1] == 1:
+                kin = kin[:, 0]
+            # JAX does not support masked arrays; convert to plain
+            # ndarray (masked positions already excluded by good mask)
+            if isinstance(kin, np.ma.MaskedArray):
+                kin = np.asarray(kin.data)
+            gp = tinygp.GaussianProcess(kernel, kin, mean=0.0,
+                                        diag=diag)
         else:
             raise ValueError(f'Unknown gp_code_name: {self.gp_code_name}')
 
@@ -283,7 +641,7 @@ class GPModel(Model):
                     metric, ndim=self.nkernels, axes=k)
             elif kernel_name == 'RationalQuadratic':
                 kernel = amp*kernels.RationalQuadraticKernel(
-                    log_alpha=1, metric=metric, ndim=self.nkernels, axes=k)
+                    log_alpha=0, metric=metric, ndim=self.nkernels, axes=k)
             elif kernel_name == 'Exp':
                 kernel = amp*kernels.ExpKernel(
                     metric, ndim=self.nkernels, axes=k)
@@ -304,22 +662,28 @@ class GPModel(Model):
             if tinygp is None:
                 raise RuntimeError('tinygp is not available.')
             amp = np.exp(amp_log)
-            metric = np.exp(metric_log*2)
+            metric = np.exp(metric_log)  # tinygp takes scale (length-scale), not metric (length-scale²)
 
             if kernel_name == 'Matern32':
-                kernel = amp*tinygp.kernels.Matern32(metric)
+                base_kernel = amp*tinygp.kernels.Matern32(metric)
             elif kernel_name == 'ExpSquared':
-                kernel = amp*tinygp.kernels.ExpSquared(metric)
+                base_kernel = amp*tinygp.kernels.ExpSquared(metric)
             elif kernel_name == 'RationalQuadratic':
-                kernel = amp*tinygp.kernels.RationalQuadratic(alpha=1,
-                                                              scale=metric)
+                base_kernel = amp*tinygp.kernels.RationalQuadratic(
+                    alpha=1, scale=metric)
             elif kernel_name == 'Exp':
-                kernel = amp*tinygp.kernels.Exp(metric)
+                base_kernel = amp*tinygp.kernels.Exp(metric)
             else:
                 raise AssertionError(
                     f'Unsupported kernel for tinygp: {kernel_name}. '
                     'Supported: Matern32, ExpSquared, '
                     'RationalQuadratic, Exp.')
+            # When using multiple input dimensions, restrict each
+            # kernel to its corresponding axis via Subspace.
+            if self.nkernels > 1:
+                kernel = tinygp.transforms.Subspace(k, base_kernel)
+            else:
+                kernel = base_kernel
         else:
             raise ValueError(f'Unknown gp_code_name: {self.gp_code_name}')
 
@@ -368,24 +732,55 @@ class GPModel(Model):
 
             # Remove poorly handled masked values
             good = ~np.ma.getmaskarray(residuals)
-            unc_good = unc_fit[good]
-            res_good = residuals[good]
 
-            # set up GP with current parameters
-            gp = self.setup_GP(chan)
+            # Subsampling for george and tinygp only
+            do_subsample = self.gp_code_name in ('george', 'tinygp') and self.gp_subsample > 1
+            if self.gp_code_name == 'tinygp':
+                if self.kernel_inputs is None:
+                    self.setup_inputs()
+                kin_mask = np.ma.getmaskarray(
+                    self.kernel_inputs[chan]).any(axis=0)
+                good &= ~kin_mask
+            # Choose the mask for subsampling or not
+            if do_subsample:
+                step = self.gp_subsample
+                good_idx = np.flatnonzero(good)
+                sub_idx = good_idx[::step]
+                good_mask = np.zeros_like(good)
+                good_mask[sub_idx] = True
+            else:
+                good_mask = good
+            unc_good = unc_fit[good_mask]
+            res_good = residuals[good_mask]
+            gp = self.setup_GP(
+                chan, good=good_mask,
+                diag=np.asarray(unc_good)**2 if self.gp_code_name == 'tinygp' else None)
 
             if self.gp_code_name == 'george':
-                kin = self.kernel_inputs[chan][:, good].T
+                # Select kernel inputs consistent with the chosen data mask
+                kin = self.kernel_inputs[chan][:, good_mask].T
+                if isinstance(kin, np.ma.MaskedArray):
+                    kin = np.asarray(kin.data)
+                else:
+                    kin = np.asarray(kin)
+                # Ensure uncertainties and residuals are plain ndarrays
+                if isinstance(unc_good, np.ma.MaskedArray):
+                    unc_good = np.asarray(unc_good.data)
+                else:
+                    unc_good = np.asarray(unc_good)
+                res_arr = np.asarray(res_good)
                 gp.compute(kin, unc_good)
-                logL += gp.lnlikelihood(res_good, quiet=True)
+                logL += gp.lnlikelihood(res_arr, quiet=True)
             elif self.gp_code_name == 'celerite':
-                kin = self.kernel_inputs[chan][0][good]
+                # celerite never subsamples (enforced in s5_meta),
+                # but use good_mask for consistency
+                kin = self.kernel_inputs[chan][0][good_mask]
                 gp.compute(kin, yerr=unc_good)
                 logL += gp.log_likelihood(res_good)
             elif self.gp_code_name == 'tinygp':
                 if tinygp is None:
                     raise RuntimeError('tinygp is not available.')
-                cond = gp.condition(res_good, diag=unc_good)
+                cond = gp.condition(np.asarray(res_good))
                 logL += cond.log_probability
             else:
                 raise ValueError(f'Unknown gp_code_name: {self.gp_code_name}')
