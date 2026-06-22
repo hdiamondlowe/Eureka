@@ -220,6 +220,45 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
             xpos, xwidth, ypos, ywidth, xy_pos = centroid_param_list
             #at this stage these values are still in their originals, and match l4 lcdata
 
+            # Load FGS (Fine Guidance Sensor) data if specified
+            fgs_vectors = {}
+            if meta.fgs_file is not None:
+                fgs_path = meta.fgs_file
+                if not os.path.isabs(fgs_path):
+                    fgs_path = os.path.join(meta.topdir, fgs_path)
+                if not os.path.exists(fgs_path):
+                    raise FileNotFoundError(
+                        f"FGS file not found: {fgs_path}")
+                fgs_data = np.load(fgs_path)
+                for key in fgs_data.files:
+                    if key in ('time_since_start',):
+                        continue
+                    fgs_vectors['fgs_' + key] = np.ma.masked_invalid(
+                        fgs_data[key])
+                fgs_data.close()
+
+                # Apply manual_clip to FGS vectors (they were saved at
+                # the full pre-clip cadence matching S4 output)
+                if meta.manual_clip is not None:
+                    manual_clip_arr = np.atleast_2d(
+                        np.array(meta.manual_clip))
+                    first_key = next(iter(fgs_vectors))
+                    npts = len(fgs_vectors[first_key])
+                    time_bool = np.ones(npts, dtype=bool)
+                    for inds in manual_clip_arr:
+                        time_bool[inds[0]:inds[1]] = False
+                    for key in fgs_vectors:
+                        fgs_vectors[key] = fgs_vectors[key][time_bool]
+
+                log.writelog(f"\nLoaded FGS data from {fgs_path}")
+                log.writelog(f"  FGS parameters available: "
+                             f"{list(fgs_vectors.keys())}")
+                first_key = next(iter(fgs_vectors))
+                log.writelog(f"  FGS array length: "
+                             f"{len(fgs_vectors[first_key])} "
+                             f"(science LC length: "
+                             f"{len(lc.time.values)})\n")
+
             # make citations for current stage
             util.make_citations(meta, 5)
 
@@ -274,7 +313,8 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                            longparamlist, time_units,
                                            paramtitles, freenames, 1,
                                            ld_coeffs, xpos, ypos,
-                                           xwidth, ywidth, xy_pos, True)
+                                           xwidth, ywidth, xy_pos,
+                                           fgs_vectors, True)
 
                 # Save results
                 log.writelog('Saving results', mute=(not meta.verbose))
@@ -412,7 +452,8 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                            longparamlist, propagated_time_units,
                                            paramtitles, freenames, chanrng,
                                            ld_coeffs, xpos, ypos,
-                                           xwidth, ywidth, xy_pos)
+                                           xwidth, ywidth, xy_pos,
+                                           fgs_vectors)
 
                 # Save results
                 log.writelog('Saving results')
@@ -447,7 +488,8 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                            longparamlist, time_units,
                                            paramtitles, freenames, chanrng,
                                            ld_coeffs, xpos, ypos,
-                                           xwidth, ywidth, xy_pos)
+                                           xwidth, ywidth, xy_pos,
+                                           fgs_vectors)
 
                 # Save results
                 log.writelog('Saving results')
@@ -483,7 +525,8 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                                                log, longparamlist, time_units,
                                                paramtitles, freenames, chanrng,
                                                ld_coeffs, xpos, ypos,
-                                               xwidth, ywidth, xy_pos)
+                                               xwidth, ywidth, xy_pos,
+                                               fgs_vectors)
 
                     # Save results
                     log.writelog('Saving results', mute=(not meta.verbose))
@@ -501,7 +544,8 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
 
 def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                 log, longparamlist, time_units, paramtitles, freenames,
-                chanrng, ldcoeffs, xpos, ypos, xwidth, ywidth, xy_pos, white=False):
+                chanrng, ldcoeffs, xpos, ypos, xwidth, ywidth, xy_pos,
+                fgs_vectors=None, white=False):
     """Run a fit for one channel or perform a shared fit.
 
     Parameters
@@ -951,6 +995,24 @@ def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                                multwhite=lc_model.multwhite,
                                nints=lc_model.nints)
         modellist.append(t_cent)
+    # FGS (Fine Guidance Sensor) linear decorrelation models
+    if fgs_vectors is None:
+        fgs_vectors = {}
+    for fgs_name, fgs_vec in fgs_vectors.items():
+        if fgs_name in meta.run_myfuncs:
+            t_cent = CentroidModel(parameters=params, fmt='r--',
+                                   log=log, time=time, time_units=time_units,
+                                   freenames=freenames,
+                                   longparamlist=lc_model.longparamlist,
+                                   nchannel=chanrng,
+                                   nchannel_fitted=nchannel_fitted,
+                                   fitted_channels=fitted_channels,
+                                   wl_groups=meta.wl_groups,
+                                   paramtitles=paramtitles,
+                                   axis=fgs_name, centroid=fgs_vec,
+                                   multwhite=lc_model.multwhite,
+                                   nints=lc_model.nints)
+            modellist.append(t_cent)
     if 'common_mode' in meta.run_myfuncs:
         t_cm = CommonModeModel(parameters=params, meta=meta,
                                fmt='r--', log=log, time=time,
@@ -969,9 +1031,10 @@ def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
         # Check for conflicts: a covariate should not be used both as
         # a GP kernel input and as a linear decorrelation parameter.
         from .models.GPModel import GP_CENTROID_NAMES
-        gp_centroid_inputs = set(meta.kernel_inputs) & GP_CENTROID_NAMES
-        linear_decorr = set(meta.run_myfuncs) & GP_CENTROID_NAMES
-        overlap = gp_centroid_inputs & linear_decorr
+        all_decorr_names = GP_CENTROID_NAMES | set(fgs_vectors.keys())
+        gp_decorr_inputs = set(meta.kernel_inputs) & all_decorr_names
+        linear_decorr = set(meta.run_myfuncs) & all_decorr_names
+        overlap = gp_decorr_inputs & linear_decorr
         if overlap:
             raise ValueError(
                 f"The following parameter(s) are listed both as GP "
@@ -998,7 +1061,7 @@ def fit_channel(meta, time, flux, chan, flux_err, eventlabel, params,
                        nints=lc_model.nints,
                        xpos=xpos, ypos=ypos,
                        xwidth=xwidth, ywidth=ywidth,
-                       xy_pos=xy_pos)
+                       xy_pos=xy_pos, **fgs_vectors)
         # Always log and print which GP backend is used and gp_subsample if present
         msg = f"GP backend: {meta.GP_package}"
         if meta.gp_subsample > 1:

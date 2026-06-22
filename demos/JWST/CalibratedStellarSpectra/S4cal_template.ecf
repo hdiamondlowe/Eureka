@@ -23,6 +23,10 @@ base_dur        0.1             # Days
 smoothing       1000            # A good starting point is the number of datapoints (i.e. wavelengths).  A value of 0 will apply interpolation.
 sigma_thresh    [4,4,4]         # Three rounds of 4-sigma clipping ([4,4,4])
 
+# Aperture correction to infinite aperture (photometry only).
+# For MIRI, see Gordon+ 2025 Table 4 for filter-specific values.
+# apcorr          1.497         # Example: F1500W aperture correction factor
+
 # Diagnostics
 isplots_S4cal   3               # Generate few (1), some (3), or many (5) figures (Options: 1 - 5)
 nbin_plot       200             # The number of time bins that should be used for figure 4202

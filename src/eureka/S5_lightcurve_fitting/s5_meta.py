@@ -167,6 +167,19 @@ class S5MetaClass(MetaClass):
                 raise ValueError(
                     'run_pfrac must be between 0 and 1, exclusive.')
 
+        # FGS (Fine Guidance Sensor) inputs for decorrelation
+        self.fgs_file = getattr(self, 'fgs_file', None)
+        if self.fgs_file is not None:
+            import os
+            fgs_path = self.fgs_file
+            if not os.path.isabs(fgs_path):
+                fgs_path = os.path.join(getattr(self, 'topdir', './'),
+                                        fgs_path)
+            if not os.path.exists(fgs_path):
+                raise FileNotFoundError(
+                    f"FGS file specified in ECF not found: {fgs_path}. "
+                    "Set fgs_file to None or provide a valid path.")
+
         # GP inputs
         self.kernel_inputs = getattr(self, 'kernel_inputs', ['time'])
         self.kernel_class = getattr(self, 'kernel_class', ['Matern32'])

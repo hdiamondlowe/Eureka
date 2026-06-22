@@ -649,6 +649,23 @@ skip_apphot_bg
 ''''''''''''''
 Only used for photometry analyses. Skips the background subtraction in the aperture photometry routine. If the user does the 1/f noise subtraction during S3, the code will subtract the background from each amplifier region. The aperture photometry code will again subtract a background flux from the target flux by calculating the flux in an annulus in the background. If the user wants to skip the annular background subtraction step, skip_apphot_bg has to be set to True.
 
+phot_calib_unc
+''''''''''''''
+Only used for MIRI photometry when ``calibrated_spectra = True``. If ``True`` (default), the absolute flux-calibration uncertainty σ(CF) from Gordon et al. (2025, AJ, 169, 6, Table 8) is added in quadrature to the aperture photometry error ``aperr`` after extraction. Has no effect when ``calibrated_spectra = False`` (data in electrons).
+
+The JWST ``photom`` pipeline step applies the per-filter calibration factor (CF), the subarray-dependent throughput correction (DSA, Table 7), and the time-dependent response loss, but does **not** propagate any uncertainty on the calibration factor itself.  Setting ``phot_calib_unc = True`` fills this gap by adding the fractional uncertainty as::
+
+    aperr_total = sqrt(aperr_pipeline² + (σ(CF) × aplev)²)
+
+σ(CF) ranges from 0.32% (F1000W) to 0.98% (F2550W) for MIRI imaging filters.
+Set to ``False`` to skip this correction and use only the pipeline-propagated errors.
+
+phot_calib_repeat
+'''''''''''''''''
+Only used for MIRI photometry, and only when ``phot_calib_unc = True``. If ``True``, the repeatability uncertainty σ(repeat) from Gordon et al. (2025, AJ, 169, 6, Table 8) is also combined in quadrature with σ(CF) before inflating ``aperr``.  Defaults to ``False``.
+
+σ(repeat) quantifies the repeatability of observations of point sources taken with a standard four-point dither pattern (Gordon et al. 2025, Sec. 3.1).  JWST time-series photometry (TSO) uses a fixed pointing without dithering, so σ(repeat) does not straightforwardly characterise TSO noise and may over-inflate per-integration uncertainties.  Set to ``True`` for a conservative noise floor.
+
 photap
 ''''''
 Only used for photometry analyses. Size of photometry aperture in pixels. If aperture_shape is 'circle', then photap is the radius of the circle. If aperture_shape is 'hexagon', then photap is the radius of the circle circumscribing the hexagon. If aperture_shape is 'rectangle', then photap is the half-width of the rectangle along the x-axis. If the center of a pixel is not included within the aperture, it is being considered. If you want to try multiple values sequentially, you can provide a list in the format [Start, Stop, Step]; this will give you sizes ranging from Start to Stop (inclusively) in steps of size Step. For example, [10,14,2] tries [10,12,14], but [10,15,2] still tries [10,12,14]. If skyin and/or skywidth are also lists, all combinations of the three will be attempted.
@@ -983,6 +1000,11 @@ Aperture corrections are also hosted on `CRDS <https://jwst-crds.stsci.edu/>`_, 
 sigma_thresh
 ''''''''''''
 Sigma threshold when flagging outliers along the wavelength axis.  Process is performed X times, where X is the length of the list. Defaults to [4, 4, 4].
+
+
+manual_clip
+'''''''''''
+Optional. A list of lists specifying the start and end integration numbers for manual removal. E.g., to remove the first 20 integrations specify [[0,20]], and to also remove the last 20 integrations specify [[0,20],[-20,None]]. The start and end values follow numpy slicing convention: *inclusive* start index, *exclusive* end index, and ``None`` means unbounded. Clipping is applied before sigma rejection and all other processing. Defaults to None (no manual clipping).
 
 
 isplots_S4cal

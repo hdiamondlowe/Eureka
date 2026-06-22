@@ -45,14 +45,24 @@ def plot_whitelc(optspec, time, meta, i, fig=None, ax=None):
     kept_mask_plot = getattr(meta, 's4cal_plot_kept_mask',
                              np.ones(len(time), dtype=bool))
 
+    sigmaclip_mask = getattr(meta, 's4cal_plot_sigmaclip_mask', None)
+
     if lc_all_raw is not None and all_plot_times is not None:
         lc_all = lc_all_raw / np.nanmean(lc_all_raw)
-        lc_kept = lc_all[kept_mask_plot]
-        time_vals = all_plot_times[kept_mask_plot]
-        has_removed = bool(np.any(~kept_mask_plot))
+        # Combine manual_clip and sigma_thresh removal masks
+        removed_mask = ~kept_mask_plot
+        if sigmaclip_mask is not None:
+            # sigmaclip_mask is sized to post-manual_clip integrations;
+            # expand back to full time array
+            full_sigma_mask = np.zeros(len(all_plot_times), dtype=bool)
+            full_sigma_mask[kept_mask_plot] = sigmaclip_mask
+            removed_mask = removed_mask | full_sigma_mask
+        lc_kept = lc_all[~removed_mask]
+        time_vals = all_plot_times[~removed_mask]
+        has_removed = bool(np.any(removed_mask))
         if has_removed:
-            lc_removed = lc_all[~kept_mask_plot]
-            times_removed = all_plot_times[~kept_mask_plot]
+            lc_removed = lc_all[removed_mask]
+            times_removed = all_plot_times[removed_mask]
         all_times = all_plot_times
     else:
         # Fallback for old meta objects
@@ -123,7 +133,7 @@ def plot_whitelc(optspec, time, meta, i, fig=None, ax=None):
         # Binned removed data in red
         if has_removed:
             ax.plot(rem_time_bin - toffset, rem_lc_bin, '.', color='red',
-                    alpha=0.8, zorder=3, label='Manually Clipped')
+                    alpha=0.8, zorder=3, label='Clipped')
     ymin, ymax = ax.get_ylim()
     ax.fill_betweenx((ymin, ymax), time[it0]-toffset, time[it1]-toffset,
                      color=colors[1], alpha=0.2)

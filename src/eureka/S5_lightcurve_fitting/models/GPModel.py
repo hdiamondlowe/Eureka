@@ -371,8 +371,9 @@ class GPModel(Model):
         """Build kernel input arrays; standardize if requested.
 
         Supported input names are 'time', 'xpos', 'ypos', 'xwidth',
-        and 'ywidth'.  When normalize=True, inputs are standardized to
-        zero mean and unit standard deviation.
+        'ywidth', 'xy_pos', and any FGS parameter (prefixed 'fgs_').
+        When normalize=True, inputs are standardized to zero mean and
+        unit standard deviation.
         """
         # Map from input name to the corresponding stored vector.
         _input_vectors = {
@@ -383,6 +384,10 @@ class GPModel(Model):
             'ywidth': getattr(self, 'ywidth', None),
             'xy_pos': getattr(self, 'xy_pos', None),
         }
+        # Include any FGS vectors passed as attributes
+        for name in self.kernel_input_names:
+            if name.startswith('fgs_') and name not in _input_vectors:
+                _input_vectors[name] = getattr(self, name, None)
 
         # Store by real channel id to avoid index mismatches.
         self.kernel_inputs = {}

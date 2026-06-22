@@ -52,6 +52,12 @@ class S4cal_MetaClass(MetaClass):
         if self.apcorr is None:
             self.apcorr = 1.0
 
+        # Gordon et al. (2025) MIRI flux-calibration uncertainty.
+        # Only active when meta.photometry and meta.calibrated_spectra.
+        # Adds σ(CF) in quadrature with the empirical base_ferr/ecl_ferr.
+        self.phot_calib_unc = getattr(self, 'phot_calib_unc', True)
+        self.phot_calib_repeat = getattr(self, 'phot_calib_repeat', False)
+
         # Outlier detection
         self.smoothing = getattr(self, 'smoothing', 0)
         self.sigma_thresh = getattr(self, 'sigma_thresh', [4, 4, 4])

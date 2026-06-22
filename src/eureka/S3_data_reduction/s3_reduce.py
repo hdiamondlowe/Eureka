@@ -38,6 +38,7 @@ from . import bright2flux as b2f
 
 from .s3_meta import S3MetaClass
 from ..lib import logedit
+from ..lib import miri_calib
 from ..lib import manageevent as me
 from ..lib import util
 from ..lib import centerdriver, apphot
@@ -582,7 +583,48 @@ def reduce(eventlabel, ecf_path=None, s2_meta=None, input_meta=None):
                         else:
                             raise ValueError('Unknown phot_method '
                                              f'"{meta.phot_method}"')
-                    
+
+                    # --- MIRI flux-calibration uncertainty (Gordon+ 2025) ---
+                    # The JWST photom step applies CF, DSA (subarray), and the
+                    # time-dependent response correction but does NOT propagate
+                    # uncertainty on CF.  Inflate aperr in quadrature here.
+                    # Only applies when calibrated_spectra=True, i.e. the flux
+                    # is in physical units (mJy); not applicable when data have
+                    # been converted to electrons.
+                    if (meta.inst == 'miri' and meta.photometry
+                            and meta.calibrated_spectra
+                            and meta.phot_calib_unc):
+                        try:
+                            frac = miri_calib.get_calib_unc_frac(
+                                meta.filter,
+                                include_repeat=meta.phot_calib_repeat)
+                        except ValueError as err:
+                            log.writelog(f'  WARNING: {err}  Skipping MIRI '
+                                         'calibration uncertainty inflation.')
+                        else:
+                            aperr_old = data['aperr'].values
+                            aplev = data['aplev'].values
+                            data['aperr'].values = np.sqrt(
+                                aperr_old**2 + (frac * aplev)**2)
+                            sigma_cf_pct = (
+                                miri_calib.GORDON2025_SIGMA_CF[
+                                    meta.filter.upper()] * 100)
+                            if meta.phot_calib_repeat:
+                                sigma_rep = miri_calib.GORDON2025_SIGMA_REPEAT[
+                                    meta.filter.upper()]
+                                rep_str = (f', σ(repeat)={sigma_rep*100:.2f}%'
+                                           if sigma_rep is not None
+                                           else ', σ(repeat)=N/A')
+                            else:
+                                rep_str = ' (σ(repeat) excluded; set '\
+                                          'phot_calib_repeat=True to include)'
+                            log.writelog(
+                                f'  Applied MIRI flux-calibration uncertainty '
+                                f'for {meta.filter}: σ(CF)={sigma_cf_pct:.2f}%'
+                                f'{rep_str}; aperr inflated by '
+                                f'{frac*100:.2f}% of aplev in quadrature '
+                                f'(Gordon et al. 2025, AJ 169 6, Table 8).')
+
                     # save xypos relative to movement axis
                     data['centroid_xy'] = (('time'), centerdriver.xypos(data, meta))
 

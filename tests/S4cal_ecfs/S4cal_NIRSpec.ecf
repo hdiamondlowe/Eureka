@@ -20,6 +20,7 @@ base_dur        0.002             # Days
 
 # Outlier detection
 sigma_thresh    [4,4,4]
+manual_clip     None
 
 # Diagnostics
 isplots_S4cal   3               # Generate few (1), some (3), or many (5) figures (Options: 1 - 5)

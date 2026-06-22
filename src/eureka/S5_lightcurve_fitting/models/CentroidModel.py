@@ -26,9 +26,13 @@ class CentroidModel(Model):
             paramtitles, axis, and centroid arguments here.
         """
         # Validate axis kwarg early
-        if axis is None or axis not in ['xpos', 'ypos', 'xwidth', 'ywidth', 'xy_pos']:
-            raise ValueError("CentroidModel requires an 'axis' argument set "
-                             "to 'xpos', 'ypos', 'xwidth', 'ywidth', or 'xy_pos'.")
+        _valid_axes = ['xpos', 'ypos', 'xwidth', 'ywidth', 'xy_pos']
+        if axis is None or (axis not in _valid_axes
+                            and not axis.startswith('fgs_')):
+            raise ValueError(
+                "CentroidModel requires an 'axis' argument set "
+                f"to one of {_valid_axes} or an FGS parameter name "
+                "starting with 'fgs_' (e.g. 'fgs_x_mean').")
         super().__init__(axis=axis, **kwargs)
         self.name = self.axis
 

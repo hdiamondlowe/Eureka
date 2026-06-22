@@ -424,12 +424,12 @@ def calibrated_spectra(data, meta, log):
                  mute=(not meta.verbose))
     data['flux'].data *= 1e9*data.shdr['PIXAR_SR']
     data['err'].data *= 1e9*data.shdr['PIXAR_SR']
-    data['v0'].data *= 1e9*data.shdr['PIXAR_SR']
+    data['v0'].data *= (1e9*data.shdr['PIXAR_SR'])**2
 
     # Update units
     data['flux'].attrs["flux_units"] = 'mJy'
     data['err'].attrs["flux_units"] = 'mJy'
-    data['v0'].attrs["flux_units"] = 'mJy'
+    data['v0'].attrs["flux_units"] = 'mJy^2'
     return data
 
 

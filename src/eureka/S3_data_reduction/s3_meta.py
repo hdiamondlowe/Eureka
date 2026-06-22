@@ -376,6 +376,22 @@ class S3MetaClass(MetaClass):
         if self.centroid_method == 'mgmc':
             self.gauss_frame = getattr(self, 'gauss_frame', 15)
 
+        # Gordon et al. (2025) MIRI flux-calibration uncertainty.
+        # Only active when calibrated_spectra=True (flux in physical units).
+        # phot_calib_unc: add the per-filter σ(CF) from Table 8 in quadrature
+        # with the pipeline-propagated aperr.  The JWST photom step applies the
+        # calibration factor (CF), subarray throughput (DSA), and time-dependent
+        # response loss, but does NOT propagate the uncertainty on CF itself.
+        # Default True so that reported aperr includes the ~0.3–1% absolute
+        # flux-calibration noise floor when working in physical units.
+        self.phot_calib_unc = getattr(self, 'phot_calib_unc', True)
+        # phot_calib_repeat: also include σ(repeat) from Table 8 in quadrature.
+        # σ(repeat) characterises the repeatability of 4-point-dithered
+        # calibration-star observations.  TSO data use a fixed pointing (no
+        # dither), so this term does not straightforwardly apply and is left
+        # opt-in.  Set to True for a conservative noise floor.
+        self.phot_calib_repeat = getattr(self, 'phot_calib_repeat', False)
+
         self.set_photometric_defaults()
 
     def setup_aperture_radii(self):

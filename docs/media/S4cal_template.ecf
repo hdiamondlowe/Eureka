@@ -22,6 +22,7 @@ base_dur        0.1             # Days
 # Outlier detection
 smoothing       1000            # A good starting point is the number of datapoints (i.e. wavelengths).  A value of 0 will apply interpolation.
 sigma_thresh    [4,4,4]         # Three rounds of 4-sigma clipping ([4,4,4])
+manual_clip     None            # A list of lists specifying the start and end integration numbers for manual removal. E.g., [[0,20],[-20,None]]
 
 # Diagnostics
 isplots_S4cal   3               # Generate few (1), some (3), or many (5) figures (Options: 1 - 5)

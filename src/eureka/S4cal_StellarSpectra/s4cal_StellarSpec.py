@@ -12,6 +12,7 @@ import scipy.interpolate as spi
 from ..version import version
 from ..lib import manageevent as me
 from ..lib import util, logedit
+from ..lib import miri_calib
 from ..S3_data_reduction.sigrej import sigrej
 from .s4cal_meta import S4cal_MetaClass
 from .plots_s4cal import plot_whitelc, plot_stellarSpec
@@ -147,6 +148,8 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
         flux_units = spec.aplev.flux_units
         wave_units = spec.wave_1d.wave_units
         time_units = spec.aplev.time_units
+        # Per-integration sigma-clip mask (True = clipped)
+        meta.s4cal_plot_sigmaclip_mask = mask
     else:
         optspec_vals = spec.optspec.values
         optmask_vals = spec.optmask.values
@@ -159,6 +162,10 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
         flux_units = spec.optspec.flux_units
         wave_units = spec.optspec.wave_units
         time_units = spec.optspec.time_units
+        # Per-integration sigma-clip mask: flag integrations where any
+        # wavelength channel was clipped (beyond pre-existing optmask)
+        meta.s4cal_plot_sigmaclip_mask = (np.any(mask & ~optmask_vals,
+                                                  axis=1))
 
     # Apply aperture correction
     optspec *= meta.apcorr
@@ -291,6 +298,38 @@ def medianCalSpec(eventlabel, ecf_path=None, s3_meta=None, input_meta=None):
                                  name='Std. Dev. of In-Occultation Flux')
         denom = max(it3 - it2 + 1, 1)
         ecl_ferr = ecl_fstd.copy() / np.sqrt(denom)
+
+        # --- MIRI flux-calibration uncertainty (Gordon+ 2025) ---
+        # The empirical base_ferr and ecl_ferr capture random scatter but
+        # NOT the systematic uncertainty on the absolute flux scale.
+        # Add σ(CF) in quadrature as a systematic floor.
+        if (getattr(meta, 'inst', None) == 'miri'
+                and meta.photometry
+                and getattr(meta, 'calibrated_spectra', False)
+                and meta.phot_calib_unc):
+            try:
+                frac = miri_calib.get_calib_unc_frac(
+                    meta.filter,
+                    include_repeat=meta.phot_calib_repeat)
+            except ValueError as err:
+                log.writelog(f'  WARNING: {err}  Skipping MIRI '
+                             'calibration uncertainty inflation in S4cal.')
+            else:
+                # Inflate base_ferr and ecl_ferr in quadrature
+                calib_unc_base = np.abs(frac * base_flux)
+                base_ferr = np.sqrt(base_ferr**2 + calib_unc_base**2)
+                calib_unc_ecl = np.abs(frac * ecl_flux)
+                ecl_ferr = np.sqrt(ecl_ferr**2 + calib_unc_ecl**2)
+                sigma_cf_pct = (
+                    miri_calib.GORDON2025_SIGMA_CF[
+                        meta.filter.upper()] * 100)
+                log.writelog(
+                    f'  Applied MIRI flux-calibration uncertainty '
+                    f'for {meta.filter}: σ(CF)={sigma_cf_pct:.2f}% '
+                    f'(repeat={meta.phot_calib_repeat}); '
+                    f'base_ferr and ecl_ferr inflated by '
+                    f'{frac*100:.2f}% of flux in quadrature '
+                    f'(Gordon et al. 2025, AJ 169 6, Table 8).')
 
         # Create XArray dataset
         ds = dict(base_flux=base_flux, base_fstd=base_fstd,
