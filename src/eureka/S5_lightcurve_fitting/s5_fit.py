@@ -230,8 +230,16 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                     raise FileNotFoundError(
                         f"FGS file not found: {fgs_path}")
                 fgs_data = np.load(fgs_path)
+                fgs_time_since_start = None
                 for key in fgs_data.files:
-                    if key in ('time_since_start',):
+                    if key == 'time_since_start':
+                        # Keep this separately (rather than discarding it)
+                        # so we can sanity-check below that the FGS data
+                        # really lines up in time with this light curve,
+                        # instead of just trusting that the array lengths
+                        # happen to match.
+                        fgs_time_since_start = np.ma.masked_invalid(
+                            fgs_data[key])
                         continue
                     fgs_vectors['fgs_' + key] = np.ma.masked_invalid(
                         fgs_data[key])
@@ -249,6 +257,9 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                         time_bool[inds[0]:inds[1]] = False
                     for key in fgs_vectors:
                         fgs_vectors[key] = fgs_vectors[key][time_bool]
+                    if fgs_time_since_start is not None:
+                        fgs_time_since_start = \
+                            fgs_time_since_start[time_bool]
 
                 log.writelog(f"\nLoaded FGS data from {fgs_path}")
                 log.writelog(f"  FGS parameters available: "
@@ -258,6 +269,82 @@ def fitlc(eventlabel, ecf_path=None, s4_meta=None, input_meta=None):
                              f"{len(fgs_vectors[first_key])} "
                              f"(science LC length: "
                              f"{len(lc.time.values)})\n")
+
+                # Sanity-check that the FGS time axis actually lines up
+                # with the light curve's time axis (rather than just
+                # assuming it does because the array lengths match - a
+                # wrong obs_num/visit or a units/offset bug when
+                # generating the FGS file would silently produce a
+                # same-length but misaligned array).
+                if (fgs_time_since_start is not None
+                        and len(fgs_time_since_start) == len(lc.time.values)
+                        and len(lc.time.values) > 1):
+                    # fgs_time_since_start is elapsed hours since the
+                    # first point of the science time array used when the
+                    # FGS file was generated; reproduce the same
+                    # "elapsed time since first point" quantity (in days)
+                    # from this light curve's own time array so the two
+                    # can be compared directly.
+                    fgs_elapsed_days = np.ma.filled(
+                        fgs_time_since_start, np.nan)/24.
+                    fgs_elapsed_days = fgs_elapsed_days - fgs_elapsed_days[0]
+                    lc_elapsed_days = lc.time.values - lc.time.values[0]
+                    good = np.isfinite(fgs_elapsed_days)
+                    if np.any(good):
+                        max_dev_sec = 86400.*np.max(np.abs(
+                            lc_elapsed_days[good]-fgs_elapsed_days[good]))
+                        if max_dev_sec > 60:
+                            log.writelog(
+                                f"  WARNING: the FGS time axis deviates "
+                                f"from this light curve's time axis by "
+                                f"up to {max_dev_sec:.1f} seconds! The "
+                                f"FGS data may not actually correspond to "
+                                f"the same time points as this light "
+                                f"curve - double-check the obs_num/visit "
+                                f"used to generate "
+                                f"{os.path.basename(fgs_path)}.\n")
+                        else:
+                            log.writelog(
+                                f"  FGS time axis matches this light "
+                                f"curve's time axis to within "
+                                f"{max_dev_sec:.1f} seconds.\n")
+                elif fgs_time_since_start is not None:
+                    log.writelog(
+                        f"  WARNING: FGS time_since_start array length "
+                        f"({len(fgs_time_since_start)}) does not match "
+                        f"the light curve length ({len(lc.time.values)}) "
+                        f"after clipping - cannot verify time alignment!\n")
+
+                # Report how many points are missing/invalid in each FGS
+                # vector (e.g. due to gaps in guidestar coverage) and
+                # roughly where those points are located, since those
+                # points will no longer be silently dropped from the fit
+                # (see CentroidModel/GPModel for how they're now handled).
+                for fgs_name, fgs_vec in fgs_vectors.items():
+                    mask = np.ma.getmaskarray(fgs_vec)
+                    n_invalid = int(np.sum(mask))
+                    if n_invalid == 0:
+                        continue
+                    npts = len(fgs_vec)
+                    invalid_idx = np.where(mask)[0]
+                    edge = max(10, npts//10)
+                    frac_tail = np.sum(invalid_idx >= npts-edge)/n_invalid
+                    frac_start = np.sum(invalid_idx < edge)/n_invalid
+                    if frac_tail > 0.9:
+                        location = 'concentrated at the END'
+                    elif frac_start > 0.9:
+                        location = 'concentrated at the START'
+                    else:
+                        location = 'scattered throughout'
+                    log.writelog(
+                        f"  WARNING: {fgs_name} has {n_invalid}/{npts} "
+                        f"invalid (NaN) points (indices "
+                        f"{invalid_idx.min()}-{invalid_idx.max()}, "
+                        f"{location}). These points will get no "
+                        f"FGS-based correction if used for linear "
+                        f"decorrelation, or an interpolated value if "
+                        f"used as a GP kernel input, rather than being "
+                        f"dropped from the fit.\n")
 
             # make citations for current stage
             util.make_citations(meta, 5)

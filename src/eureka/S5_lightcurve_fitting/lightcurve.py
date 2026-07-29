@@ -229,6 +229,28 @@ class LightCurve(m.Model):
                     model.plot(ax=ax, color=next(plot_COLORS),
                                zorder=np.inf, share=self.share, chan=channel)
 
+                # Draw predicted circular-orbit secondary-eclipse markers
+                # (dashed mid-eclipse, dotted ingress/egress), using the
+                # first fit's orbital parameters as representative
+                ref_time = np.ma.median(time)
+                for pid in range(meta.num_planets):
+                    pl_params = m.PlanetParams(self.results[0], pid=pid,
+                                               channel=channel)
+                    t_ecl, t_ing, t_egr = m.get_circular_eclipse_times(
+                        pl_params, ref_time)
+                    if t_ecl is None:
+                        continue
+                    suffix = (f' (planet {pid+1})'
+                             if meta.num_planets > 1 else '')
+                    ax.axvline(t_ecl, color='0.3', ls='--', lw=1, zorder=5,
+                              label=f'Predicted mid-eclipse{suffix}')
+                    if t_ing is not None and t_egr is not None:
+                        ax.axvline(t_ing, color='0.3', ls=':', lw=1,
+                                  zorder=5,
+                                  label=f'Predicted ingress/egress{suffix}')
+                        ax.axvline(t_egr, color='0.3', ls=':', lw=1,
+                                  zorder=5)
+
             # Determine wavelength
             if meta.multwhite:
                 wave = meta.wave[0]

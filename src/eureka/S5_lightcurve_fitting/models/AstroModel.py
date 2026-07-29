@@ -488,6 +488,59 @@ def get_ecl_midpt(params, lib=np):
     return params.t0+params.per*(phase_ecl-phase_tr)
 
 
+def get_circular_eclipse_times(params, ref_time=None):
+    """
+    Predict the secondary eclipse mid-time, ingress, and egress assuming
+    a circular orbit (ecc=0), regardless of the orbit's actual fitted
+    eccentricity.
+
+    Parameters
+    ----------
+    params : object
+        Contains the physical parameters for the transit/eclipse model
+        (needs t0, per, inc, a, and rprs/rp).
+    ref_time : float; optional
+        A representative time (e.g. the median of the plotted time array)
+        used to fold the predicted eclipse time to the cycle nearest the
+        data, in case t0 corresponds to a different epoch than ref_time.
+        If None, no folding is performed. Defaults to None.
+
+    Returns
+    -------
+    t_ecl : float or None
+        The predicted circular-orbit mid-eclipse time, folded to the cycle
+        nearest ref_time. None if the required parameters are missing.
+    t_ingress : float or None
+        The predicted circular-orbit eclipse ingress time. None if t_ecl is
+        None, or if the circular-orbit geometry does not produce an eclipse.
+    t_egress : float or None
+        The predicted circular-orbit eclipse egress time. None under the
+        same conditions as t_ingress.
+    """
+    k = params.rprs if params.rprs is not None else params.rp
+    if None in (params.t0, params.per, params.inc, params.a, k):
+        return None, None, None
+
+    # For a circular orbit, secondary eclipse occurs exactly half a period
+    # after the transit epoch, independent of the argument of periastron.
+    t_ecl = params.t0 + 0.5*params.per
+
+    # Fold to the eclipse cycle nearest the reference time
+    if ref_time is not None:
+        t_ecl += np.round((ref_time-t_ecl)/params.per)*params.per
+
+    inc_rad = params.inc*np.pi/180
+    b = params.a*np.cos(inc_rad)
+    arg = (1+k)**2 - b**2
+    if arg < 0:
+        # Circular-orbit geometry does not produce an eclipse
+        return t_ecl, None, None
+
+    duration = ((params.per/np.pi)
+               * np.arcsin(np.sqrt(arg)/(params.a*np.sin(inc_rad))))
+    return t_ecl, t_ecl - duration/2, t_ecl + duration/2
+
+
 def true_anomaly(model, t, lib=np, xtol=1e-10):
     """Convert time to true anomaly, numerically.
 

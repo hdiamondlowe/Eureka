@@ -23,7 +23,132 @@ warnings.filterwarnings("ignore", message='Ignoring specified arguments in '
 
 from ..lib import plots, util
 from ..lib.split_channels import split
-from .models.AstroModel import PlanetParams
+from .models.AstroModel import PlanetParams, get_circular_eclipse_times
+
+
+def _plot_normalized_components(ax, time, gp_components, sys_components,
+                                astro_flux):
+    """Plot normalized systematic, GP, and astrophysical model components.
+
+    Normalize each component to unit std and stack them vertically so
+    shapes are comparable regardless of amplitude. The original
+    amplitude (sigma in ppm) is shown in the legend for reference.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axis to plot the components on.
+    time : ndarray
+        The time array shared by all components.
+    gp_components : dict
+        ``{kernel_input_name: ndarray}`` GP kernel contributions. May be
+        empty if no GP was used.
+    sys_components : dict
+        ``{component.name: ndarray}`` systematic model components (raw
+        multiplicative model evaluations).
+    astro_flux : ndarray
+        The combined (multiplicative) astrophysical model evaluation.
+    """
+    comp_cmap = plt.get_cmap('tab10')
+    n_total = len(gp_components) + len(sys_components) + 1
+    idx = 0
+
+    # Plot individual GP kernel contributions (normalized to unit std)
+    for name, arr in gp_components.items():
+        arr_ppm = np.asarray(arr) * 1e6
+        sigma = np.std(arr_ppm)
+        if sigma > 0:
+            arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
+        else:
+            arr_norm = arr_ppm - np.mean(arr_ppm)
+        c = comp_cmap(idx % 10)
+        ax.plot(time, arr_norm, '.', ms=2, color=c, alpha=0.4,
+               label=f'GP: {name} (σ={sigma:.1f} ppm)')
+        idx += 1
+
+    # Plot systematic model deviations (normalized to unit std)
+    for name, arr in sys_components.items():
+        arr_ppm = (np.asarray(arr) - 1) * 1e6
+        sigma = np.std(arr_ppm)
+        if sigma > 0:
+            arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
+        else:
+            arr_norm = arr_ppm - np.mean(arr_ppm)
+        c = comp_cmap(idx % 10)
+        ax.plot(time, arr_norm, '-', lw=2, color=c, alpha=0.8,
+               label=f'{name} (σ={sigma:.1f} ppm)')
+        idx += 1
+
+    # Plot the combined astrophysical model (normalized to unit std)
+    arr_ppm = (np.asarray(astro_flux) - 1) * 1e6
+    sigma = np.std(arr_ppm)
+    if sigma > 0:
+        arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
+    else:
+        arr_norm = arr_ppm - np.mean(arr_ppm)
+    c = comp_cmap(idx % 10)
+    ax.plot(time, arr_norm, '-', lw=2, color=c, alpha=0.8,
+           label=f'Astrophysical model (σ={sigma:.1f} ppm)')
+
+    ax.axhline(0, color='0.7', lw=0.5, zorder=0)
+    ax.set_ylabel('Normalized Components\n(each σ = 1)', size=14)
+    ax.set_xticks([])
+    ax.legend(fontsize=8, ncol=max(1, (n_total + 1) // 2),
+             loc='best', framealpha=0.7, markerscale=3)
+
+
+def _plot_predicted_eclipse_markers(ax, model, meta, channel, time):
+    """Draw predicted circular-orbit secondary-eclipse markers.
+
+    Draws a dashed line at the predicted mid-eclipse time and two dotted
+    lines at the predicted ingress/egress times (assuming a circular orbit,
+    regardless of the fit's actual eccentricity), for each planet in the
+    fit. Lines are drawn on every axis in ``ax``, but legend labels are only
+    attached to the first axis to avoid cluttering the other panels.
+
+    Parameters
+    ----------
+    ax : sequence of matplotlib.axes.Axes
+        The stacked subplots to draw the markers on.
+    model : eureka.S5_lightcurve_fitting.models.CompositeModel
+        The fitted composite model (used to resolve orbital parameters).
+    meta : eureka.lib.readECF.MetaClass
+        The metadata object (needs num_planets).
+    channel : int
+        The channel number.
+    time : ndarray
+        The (already channel-split) time array.
+
+    Returns
+    -------
+    bool
+        True if at least one marker was drawn, so the caller can decide
+        whether to add a legend.
+    """
+    ref_time = np.ma.median(time)
+    drawn = False
+    for pid in range(meta.num_planets):
+        pl_params = PlanetParams(model, pid=pid, channel=channel)
+        t_ecl, t_ing, t_egr = get_circular_eclipse_times(pl_params, ref_time)
+        if t_ecl is None:
+            continue
+        drawn = True
+        suffix = f' (planet {pid+1})' if meta.num_planets > 1 else ''
+
+        ax[0].axvline(t_ecl, color='0.3', ls='--', lw=1, zorder=5,
+                     label=f'Predicted mid-eclipse{suffix}')
+        for a in ax[1:]:
+            a.axvline(t_ecl, color='0.3', ls='--', lw=1, zorder=5)
+
+        if t_ing is not None and t_egr is not None:
+            ax[0].axvline(t_ing, color='0.3', ls=':', lw=1, zorder=5,
+                         label=f'Predicted ingress/egress{suffix}')
+            ax[0].axvline(t_egr, color='0.3', ls=':', lw=1, zorder=5)
+            for a in ax[1:]:
+                a.axvline(t_ing, color='0.3', ls=':', lw=1, zorder=5)
+                a.axvline(t_egr, color='0.3', ls=':', lw=1, zorder=5)
+
+    return drawn
 
 
 @plots.apply_style
@@ -47,49 +172,56 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
         raise ValueError(f'Expected type str for fitter, instead received a '
                          f'{type(fitter)}')
 
-    model_sys_full = model.syseval()
-    model_phys_full, new_time, nints_interp = \
-        model.physeval(interp=meta.interp)
+    model_phys_full, _, _ = model.physeval(interp=False)
     model_noGP = model.eval(incl_GP=False)
     model_gp = model.GPeval(model_noGP)
     model_eval = model_noGP+model_gp
+
+    # Per-kernel GP decomposition (empty dict if no GP) and per-systematic-
+    # model components, used to populate the components panel below
+    gp_components_full = model.GPeval_per_kernel(model_noGP)
+    sys_components_full = model.syseval_per_component()
 
     for i, channel in enumerate(lc.fitted_channels):
         flux = deepcopy(lc.flux)
         unc = deepcopy(lc.unc_fit)
         model_lc = deepcopy(model_eval)
-        gp = deepcopy(model_gp)
-        model_sys = model_sys_full
-        model_phys = model_phys_full
+        model_phys = deepcopy(model_phys_full)
         color = lc.colors[i]
+
+        # Deep-copy per-kernel and per-sys arrays for splitting
+        gp_comp_chan = {name: deepcopy(arr)
+                       for name, arr in gp_components_full.items()}
+        sys_comp_chan = {name: deepcopy(arr)
+                        for name, arr in sys_components_full.items()}
 
         if lc.share and not meta.multwhite:
             time = lc.time
-            new_timet = new_time
 
             # Split the arrays that have lengths of the original time axis
-            flux, unc, model_lc, model_sys, gp = \
-                split([flux, unc, model_lc, model_sys, gp],
+            flux, unc, model_lc, model_phys = \
+                split([flux, unc, model_lc, model_phys],
                       meta.nints, channel)
-
-            # Split the arrays that have lengths of the new (potentially
-            # interpolated) time axis
-            model_phys = split([model_phys, ], nints_interp, channel)[0]
+            for name in gp_comp_chan:
+                gp_comp_chan[name] = split([gp_comp_chan[name]],
+                                          meta.nints, channel)[0]
+            for name in sys_comp_chan:
+                sys_comp_chan[name] = split([sys_comp_chan[name]],
+                                           meta.nints, channel)[0]
         elif meta.multwhite:
             # Split the arrays that have lengths of the original time axis
-            time, flux, unc, model_lc, model_sys, gp = \
-                split([lc.time, flux, unc, model_lc, model_sys, gp],
+            time, flux, unc, model_lc, model_phys = \
+                split([lc.time, flux, unc, model_lc, model_phys],
                       meta.nints, channel)
-
-            # Split the arrays that have lengths of the new (potentially
-            # interpolated) time axis
-            model_phys, new_timet = split([model_phys, new_time],
-                                          nints_interp, channel)
+            for name in gp_comp_chan:
+                gp_comp_chan[name] = split([gp_comp_chan[name]],
+                                          meta.nints, channel)[0]
+            for name in sys_comp_chan:
+                sys_comp_chan[name] = split([sys_comp_chan[name]],
+                                           meta.nints, channel)[0]
         else:
             time = lc.time
-            new_timet = new_time
 
-        normflux = flux/model_sys - gp
         residuals = flux - model_lc
 
         # Get binned data and times
@@ -100,7 +232,6 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
             binned_time = util.binData_time(time, time, nbin=nbin_plot)
             binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
             binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
-            binned_normflux = util.binData_time(normflux, time, nbin=nbin_plot)
             binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
             binned_color = plots.darken_color(color)
             overplot_binned = True
@@ -121,13 +252,8 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
         ax[0].set_ylabel('Normalized Flux', size=14)
         ax[0].set_xticks([])
 
-        ax[1].errorbar(time, normflux, yerr=unc, fmt='.', color=color, alpha=0.1)
-        if overplot_binned:
-            ax[1].errorbar(binned_time, binned_normflux, yerr=binned_unc, fmt='.',
-                           color='w', ecolor=binned_color, mec=binned_color)
-        ax[1].plot(new_timet, model_phys, color='0.3', zorder=10)
-        ax[1].set_ylabel('Calibrated Flux', size=14)
-        ax[1].set_xticks([])
+        _plot_normalized_components(ax[1], time, gp_comp_chan, sys_comp_chan,
+                                    model_phys)
 
         ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.', color=color, alpha=0.1)        
         if overplot_binned:
@@ -136,6 +262,9 @@ def plot_fit(lc, model, meta, fitter, isTitle=True):
         ax[2].axhline(0, color='0.3', zorder=10)
         ax[2].set_ylabel('Residuals (ppm)', size=14)
         ax[2].set_xlabel(lc.time_units[i] if isinstance(lc.time_units, list) else lc.time_units, size=14)
+
+        if _plot_predicted_eclipse_markers(ax, model, meta, channel, time):
+            ax[0].legend(loc='best', fontsize=8)
 
         fig.get_layout_engine().set(hspace=0, h_pad=0)
         fig.align_ylabels(ax)
@@ -669,172 +798,6 @@ def plot_res_distr(lc, model, meta, fitter):
         fname = (f'figs{os.sep}fig5302_{fname_tag}_res_distri_{fitter}'
                  + plots.get_filetype())
         plt.savefig(meta.outputdir+fname, bbox_inches='tight', dpi=300)
-        if not meta.hide_plots:
-            plt.pause(0.2)
-
-
-@plots.apply_style
-def plot_GP_components(lc, model, meta, fitter, isTitle=True):
-    """Plot the lightcurve + GP model + residuals (Figs 5102)
-
-    Parameters
-    ----------
-    lc : eureka.S5_lightcurve_fitting.lightcurve.LightCurve
-        The lightcurve data object.
-    model : eureka.S5_lightcurve_fitting.models.CompositeModel
-        The fitted composite model.
-    meta : eureka.lib.readECF.MetaClass
-        The metadata object.
-    fitter : str
-        The name of the fitter (for plot filename).
-    isTitle : bool; optional
-        Should figure have a title. Defaults to True.
-    """
-    if not isinstance(fitter, str):
-        raise ValueError(f'Expected type str for fitter, instead received a '
-                         f'{type(fitter)}')
-
-    model_eval = model.eval()
-    model_GP = model.GPeval(model_eval)
-    model_with_GP = model_eval + model_GP
-
-    # Per-kernel GP decomposition and per-systematic-model components
-    gp_components = model.GPeval_per_kernel(model_eval)
-    sys_components = model.syseval_per_component()
-
-    for i, channel in enumerate(lc.fitted_channels):
-        flux = deepcopy(lc.flux)
-        unc = deepcopy(lc.unc_fit)
-        model_lc = deepcopy(model_with_GP)
-        model_GP_component = deepcopy(model_GP)
-        color = lc.colors[i]
-
-        # Deep-copy per-kernel and per-sys arrays for splitting
-        gp_comp_chan = {name: deepcopy(arr)
-                       for name, arr in gp_components.items()}
-        sys_comp_chan = {name: deepcopy(arr)
-                        for name, arr in sys_components.items()}
-
-        if lc.share and not meta.multwhite:
-            time = lc.time
-            # Split the arrays that have lengths of the original time axis
-            flux, unc, model_lc, model_GP_component = \
-                split([flux, unc, model_lc, model_GP_component],
-                      meta.nints, channel)
-            for name in gp_comp_chan:
-                gp_comp_chan[name] = split([gp_comp_chan[name]],
-                                          meta.nints, channel)[0]
-            for name in sys_comp_chan:
-                sys_comp_chan[name] = split([sys_comp_chan[name]],
-                                           meta.nints, channel)[0]
-        elif meta.multwhite:
-            # Split the arrays that have lengths of the original time axis
-            time, flux, unc, model_lc, model_GP_component = \
-                split([lc.time, flux, unc, model_lc, model_GP_component],
-                      meta.nints, channel)
-            for name in gp_comp_chan:
-                gp_comp_chan[name] = split([gp_comp_chan[name]],
-                                          meta.nints, channel)[0]
-            for name in sys_comp_chan:
-                sys_comp_chan[name] = split([sys_comp_chan[name]],
-                                           meta.nints, channel)[0]
-        else:
-            time = lc.time
-
-        residuals = flux - model_lc
-
-        if not meta.nbin_plot or meta.nbin_plot > len(time):
-             overplot_binned = False
-        else:
-            nbin_plot = meta.nbin_plot
-            binned_time = util.binData_time(time, time, nbin=nbin_plot)
-            binned_flux = util.binData_time(flux, time, nbin=nbin_plot)
-            binned_unc = util.binData_time(unc, time, nbin=nbin_plot, err=True)
-            binned_res = util.binData_time(residuals, time, nbin=nbin_plot)
-            binned_color = plots.darken_color(color)
-            overplot_binned = True
-
-        fig = plt.figure(5102)
-        fig.set_size_inches(8, 6, forward=True)
-        fig.clf()
-
-        ax = fig.subplots(3, 1)
-        ax[0].errorbar(time, flux, yerr=unc, fmt='.', color=color, alpha=0.1)
-        if overplot_binned:
-            ax[0].errorbar(binned_time, binned_flux, yerr=binned_unc, 
-                           fmt='.', color='w', ecolor=binned_color, mec=binned_color)
-        
-        ax[0].plot(time, model_lc, '.', ls='', ms=1, color='0.3',
-                   zorder=10)
-        if isTitle:
-            ax[0].set_title(f'{meta.eventlabel} - Channel {channel} - '
-                            f'{fitter}')
-        ax[0].set_ylabel('Normalized Flux', size=14)
-        ax[0].set_xticks([])
-
-        # --- GP components panel ---
-        # Normalize each component to unit std and stack them vertically
-        # so shapes are comparable regardless of amplitude.  The original
-        # amplitude (σ in ppm) is shown in the legend for reference.
-        comp_cmap = plt.get_cmap('tab10')
-        n_gp = len(gp_comp_chan)
-        n_sys = len(sys_comp_chan)
-        n_total = n_gp + n_sys
-        idx = 0
-
-        # Plot individual GP kernel contributions (normalized to unit std)
-        for name, arr in gp_comp_chan.items():
-            arr_ppm = np.asarray(arr) * 1e6
-            sigma = np.std(arr_ppm)
-            if sigma > 0:
-                arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
-            else:
-                arr_norm = arr_ppm - np.mean(arr_ppm)
-            c = comp_cmap(idx % 10)
-            ax[1].plot(time, arr_norm, '.', ms=2, color=c, alpha=0.4,
-                       label=f'GP: {name} (σ={sigma:.1f} ppm)')
-            idx += 1
-
-        # Plot systematic model deviations (normalized to unit std)
-        for name, arr in sys_comp_chan.items():
-            arr_ppm = (np.asarray(arr) - 1) * 1e6
-            sigma = np.std(arr_ppm)
-            if sigma > 0:
-                arr_norm = (arr_ppm - np.mean(arr_ppm)) / sigma
-            else:
-                arr_norm = arr_ppm - np.mean(arr_ppm)
-            c = comp_cmap(idx % 10)
-            ax[1].plot(time, arr_norm, '-', lw=2, color=c, alpha=0.8,
-                       label=f'{name} (σ={sigma:.1f} ppm)')
-            idx += 1
-
-        ax[1].axhline(0, color='0.7', lw=0.5, zorder=0)
-        ax[1].set_ylabel('Normalized Components\n(each σ = 1)', size=14)
-        ax[1].set_xticks([])
-        if n_total > 0:
-            ax[1].legend(fontsize=8, ncol=max(1, (n_total + 1) // 2),
-                         loc='best', framealpha=0.7, markerscale=3)
-
-        ax[2].errorbar(time, residuals*1e6, yerr=unc*1e6, fmt='.', 
-                       color=color, mec=color, alpha=0.1)
-        if overplot_binned:
-            ax[2].errorbar(binned_time, binned_res*1e6, yerr=binned_unc*1e6, 
-                           fmt='.', color='w', ecolor=binned_color, mec=binned_color)
-        ax[2].axhline(0, color='0.3', zorder=10)
-        ax[2].set_ylabel('Residuals (ppm)', size=14)
-        ax[2].set_xlabel(str(lc.time_units[i] if isinstance(lc.time_units, list) else lc.time_units), size=14)
-
-        fig.get_layout_engine().set(hspace=0, h_pad=0)
-        fig.align_ylabels(ax)
-
-        if lc.white:
-            fname_tag = 'white'
-        else:
-            ch_number = str(channel).zfill(len(str(lc.nchannel)))
-            fname_tag = f'ch{ch_number}'
-        fname = (f'figs{os.sep}fig5102_{fname_tag}_lc_GP_{fitter}'
-                 + plots.get_filetype())
-        fig.savefig(meta.outputdir+fname, bbox_inches='tight', dpi=300)
         if not meta.hide_plots:
             plt.pause(0.2)
 

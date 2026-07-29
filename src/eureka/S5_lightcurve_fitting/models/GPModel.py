@@ -412,6 +412,25 @@ class GPModel(Model):
                 if self.multwhite:
                     x = split([x, ], self.nints, chan)[0]
 
+                if name.startswith('fgs_'):
+                    x_mask = np.ma.getmaskarray(x)
+                    if np.any(x_mask):
+                        # A GP kernel input needs a real coordinate value
+                        # at every point (unlike a linear decorrelation
+                        # term, "no effect" isn't a meaningful substitute
+                        # here). Fill any missing/invalid FGS points (e.g.
+                        # from gaps in guidestar coverage) via linear
+                        # interpolation, clamping to the nearest valid
+                        # value at the edges (via np.interp), so every
+                        # light curve point still gets a valid kernel
+                        # input instead of being masked out of the GP
+                        # evaluation entirely.
+                        good = ~x_mask
+                        idx = np.arange(x.size)
+                        x_filled = np.interp(idx, idx[good],
+                                             np.ma.filled(x, np.nan)[good])
+                        x = np.ma.asarray(x_filled)
+
                 if self.normalize:
                     x = (x-np.ma.mean(x))/np.ma.std(x)
 

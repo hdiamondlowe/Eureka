@@ -1,5 +1,5 @@
 from .Model import Model, CompositeModel
-from .AstroModel import AstroModel, PlanetParams
+from .AstroModel import AstroModel, PlanetParams, get_circular_eclipse_times
 from .BatmanModels import BatmanTransitModel, BatmanEclipseModel
 from .CatwomanModel import CatwomanTransitModel
 from .CommonModeModel import CommonModeModel

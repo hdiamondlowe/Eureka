@@ -68,10 +68,6 @@ def lsqfitter(lc, model, meta, log, calling_function='lsq', **kwargs):
     if meta.isplots_S5 >= 1:
         plots.plot_fit(lc, model, meta,
                        fitter=calling_function+'StartingPoint')
-        # Plot GP starting point
-        if model.GP:
-            plots.plot_GP_components(lc, model, meta,
-                                     fitter=calling_function+'StartingPoint')
 
     # Plot star spots starting point
     if 'fleck_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
@@ -167,10 +163,6 @@ def lsqfitter(lc, model, meta, log, calling_function='lsq', **kwargs):
     if ('harmonica_tr' in meta.run_myfuncs and 'a1' in freenames
             and meta.isplots_S5 >= 3):
         plots.plot_harmonica_string(lc, model, meta, fitter=calling_function)
-
-    # Plot GP fit + components
-    if model.GP and meta.isplots_S5 >= 1:
-        plots.plot_GP_components(lc, model, meta, fitter=calling_function)
 
     # Zoom in on phase variations
     if meta.isplots_S5 >= 1 and ('sinusoid_pc' in meta.run_myfuncs
@@ -301,10 +293,6 @@ def emceefitter(lc, model, meta, log, **kwargs):
     if meta.isplots_S5 >= 1:
         plots.plot_fit(lc, model, meta,
                        fitter='emceeStartingPoint')
-        # Plot GP starting point
-        if model.GP:
-            plots.plot_GP_components(lc, model, meta,
-                                     fitter='emceeStartingPoint')
 
     # Plot star spots starting point
     if 'fleck_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
@@ -436,10 +424,6 @@ def emceefitter(lc, model, meta, log, **kwargs):
     if ('harmonica_tr' in meta.run_myfuncs and 'a1' in freenames
             and meta.isplots_S5 >= 3):
         plots.plot_harmonica_string(lc, model, meta, fitter='emcee')
-
-    # Plot GP fit + components
-    if model.GP and meta.isplots_S5 >= 1:
-        plots.plot_GP_components(lc, model, meta, fitter='emcee')
 
     # Zoom in on phase variations
     if meta.isplots_S5 >= 1 and ('sinusoid_pc' in meta.run_myfuncs
@@ -849,10 +833,6 @@ def dynestyfitter(lc, model, meta, log, **kwargs):
     # Plot starting point
     if meta.isplots_S5 >= 1:
         plots.plot_fit(lc, model, meta, fitter=fittername+'StartingPoint')
-        # Plot GP starting point
-        if model.GP:
-            plots.plot_GP_components(lc, model, meta,
-                                     fitter=fittername+'StartingPoint')
 
     # Plot star spots starting point
     if 'fleck_tr' in meta.run_myfuncs and meta.isplots_S5 >= 3:
@@ -1000,10 +980,6 @@ def dynestyfitter(lc, model, meta, log, **kwargs):
             and meta.isplots_S5 >= 3):
         plots.plot_harmonica_string(lc, model, meta, fitter=fittername)
 
-    # Plot GP fit + components
-    if model.GP and meta.isplots_S5 >= 1:
-        plots.plot_GP_components(lc, model, meta, fitter=fittername)
-
     # Zoom in on phase variations
     if meta.isplots_S5 >= 1 and ('sinusoid_pc' in meta.run_myfuncs
                                  or 'poet_pc' in meta.run_myfuncs
@@ -1115,10 +1091,6 @@ def lmfitter(lc, model, meta, log, **kwargs):
     if ('harmonica_tr' in meta.run_myfuncs and 'a1' in freenames
             and meta.isplots_S5 >= 3):
         plots.plot_harmonica_string(lc, model, meta, fitter='lmfitter')
-
-    # Plot GP fit + components
-    if model.GP and meta.isplots_S5 >= 1:
-        plots.plot_GP_components(lc, model, meta, fitter='lmfitter')
 
     # Zoom in on phase variations
     if meta.isplots_S5 >= 1 and ('sinusoid_pc' in meta.run_myfuncs

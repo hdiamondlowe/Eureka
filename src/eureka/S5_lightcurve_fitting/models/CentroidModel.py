@@ -53,6 +53,7 @@ class CentroidModel(Model):
             return
 
         self._centroid = np.ma.masked_invalid(centroid_array)
+        invalid_mask = np.ma.getmaskarray(self._centroid)
         # Convert to local (mean-centered) centroid
         if self.multwhite:
             self.centroid_local = np.ma.zeros(self._centroid.shape)
@@ -66,6 +67,22 @@ class CentroidModel(Model):
         else:
             # Use .mean() to be robust to masks
             self.centroid_local = self._centroid - self._centroid.mean()
+
+        axis = getattr(self, 'axis', None)
+        if axis is not None and axis.startswith('fgs_') \
+                and np.any(invalid_mask):
+            # FGS vectors can have missing/invalid (NaN) points, e.g. due
+            # to gaps in guidestar coverage. Left as-is, those masked
+            # points would propagate through CompositeModel's
+            # multiplicative combination of components and mask out
+            # (i.e. silently drop from the fit and from diagnostic plots)
+            # the ENTIRE model at those times, even though the actual
+            # flux data there is perfectly valid. Instead, apply *no*
+            # FGS-based correction at those specific points (local
+            # contribution = 0, so lcpiece = 1) and strip the mask so
+            # every light curve point stays in the fit.
+            self.centroid_local = np.ma.filled(self.centroid_local, 0.0)
+            self.centroid_local[invalid_mask] = 0.0
 
     def eval(self, channel=None, **kwargs):
         """Evaluate the function with the given values.

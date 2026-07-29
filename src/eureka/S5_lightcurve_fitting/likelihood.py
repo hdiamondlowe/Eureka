@@ -300,7 +300,12 @@ def computeRedChiSq(lc, log, model, meta, freenames):
     model_lc = model.eval(incl_GP=True)
     residuals = (lc.flux - model_lc)
     chi2 = np.ma.sum((residuals / lc.unc_fit) ** 2)
-    chi2red = chi2 / (np.sum(~np.ma.getmaskarray(lc.flux)) - len(freenames))
+    # Use the residuals' own mask (not lc.flux's) for the point count, so
+    # the denominator is always consistent with which points actually
+    # contributed to the chi2 sum above (e.g. points masked only because
+    # a model component - such as an FGS decorrelation term - was masked
+    # there, even though lc.flux itself is unmasked at that point).
+    chi2red = chi2 / (np.sum(~np.ma.getmaskarray(residuals)) - len(freenames))
 
     log.writelog(f'Reduced Chi-squared: {chi2red}', mute=(not meta.verbose))
 

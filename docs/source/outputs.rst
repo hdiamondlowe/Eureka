@@ -155,17 +155,12 @@ Stage 5 Outputs
 ---------------
 
 In Stage 5:
-   - If ``isplots_S5`` = 1: ``Eureka!`` will plot the fitted lightcurve model over the data in each channel. If fitting with a GP, an additional figure will be made showing the GP component. If fitting a sinusoid_pc model, another zoomed-in figure with binned data will be made to emphasize the phase variations. Finally, an additional plot compares the fits from different fitters.
+   - If ``isplots_S5`` = 1: ``Eureka!`` will plot the fitted lightcurve model over the data in each channel. The middle panel shows the individual systematic (and GP, if fitting with one) components alongside the astrophysical model, each normalized to unit standard deviation for shape comparison. If fitting a sinusoid_pc model, another zoomed-in figure with binned data will be made to emphasize the phase variations. Finally, an additional plot compares the fits from different fitters.
 
    .. figure:: ../media/S5_out/fig5101_ch0_lc_emcee.png
       :alt: Stage 5 fit data and lightcurve
 
-      Fig 5101: Fitted Lightcurve, Model, and Residual Plot
-
-   .. figure:: ../media/S5_out/fig5102_ch0_lc_GP_emcee.png
-      :alt: Stage 5 GP plot
-
-      Fig 5102: Fitted Lightcurve, GP Model, and Residual Plot
+      Fig 5101: Fitted Lightcurve, Model Component Breakdown, and Residual Plot
 
    .. figure:: ../media/S5_out/fig5103_ch0_all_fits.png
       :alt: Stage 5 All fits comparison
