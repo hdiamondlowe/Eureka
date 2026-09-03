@@ -93,6 +93,8 @@ def calibrateJWST(eventlabel, ecf_path=None, s1_meta=None, input_meta=None):
 
     # Output S2 log file
     meta.s2_logname = meta.outputdir + 'S2_' + meta.eventlabel + ".log"
+    meta.s2_stpipe_logname = (meta.outputdir + 'S2_' + meta.eventlabel +
+                               "_stpipe.log")
     if s1_meta is not None:
         log = logedit.Logedit(meta.s2_logname, read=s1_meta.s1_logname)
     else:
@@ -328,7 +330,8 @@ class EurekaSpec2Pipeline(Spec2Pipeline):
         stpipe_logger.addHandler(stpipe_handler)
         stpipe_logger.setLevel(logging.INFO)
         try:
-            self.run(filename)
+            with util.capture_pipeline_log(meta.s2_stpipe_logname):
+                self.run(filename)
         finally:
             stpipe_logger.removeHandler(stpipe_handler)
 
@@ -409,7 +412,8 @@ class EurekaImage2Pipeline(Image2Pipeline):
         stpipe_logger.addHandler(stpipe_handler)
         stpipe_logger.setLevel(logging.INFO)
         try:
-            self.run(filename)
+            with util.capture_pipeline_log(meta.s2_stpipe_logname):
+                self.run(filename)
         finally:
             stpipe_logger.removeHandler(stpipe_handler)
 

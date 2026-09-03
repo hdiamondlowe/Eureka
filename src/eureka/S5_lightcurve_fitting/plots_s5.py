@@ -62,8 +62,12 @@ def _plot_normalized_components(ax, time, gp_components, sys_components,
         else:
             arr_norm = arr_ppm - np.mean(arr_ppm)
         c = comp_cmap(idx % 10)
-        ax.plot(time, arr_norm, '.', ms=2, color=c, alpha=0.4,
-               label=f'GP: {name} (σ={sigma:.1f} ppm)')
+        # Sort by time so the GP contribution plots as a continuous line
+        # even when the kernel input isn't time itself (e.g. centroid,
+        # flux, etc.), where arr is not monotonic in time.
+        order = np.argsort(time)
+        ax.plot(np.asarray(time)[order], arr_norm[order], '-', lw=1,
+               color=c, alpha=0.6, label=f'GP: {name} (σ={sigma:.1f} ppm)')
         idx += 1
 
     # Plot systematic model deviations (normalized to unit std)

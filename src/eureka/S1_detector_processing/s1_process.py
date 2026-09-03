@@ -69,6 +69,8 @@ def rampfitJWST(eventlabel, ecf_path=None, input_meta=None):
 
     # Output S2 log file
     meta.s1_logname = meta.outputdir + 'S1_' + meta.eventlabel + ".log"
+    meta.s1_stpipe_logname = (meta.outputdir + 'S1_' + meta.eventlabel +
+                               "_stpipe.log")
     log = logedit.Logedit(meta.s1_logname)
     log.writelog("\nStarting Stage 1 Processing")
     log.writelog(f"Eureka! Version: {meta.version}", mute=True)
@@ -234,7 +236,8 @@ class EurekaS1Pipeline(Detector1Pipeline):
         stpipe_logger.addHandler(stpipe_handler)
         stpipe_logger.setLevel(logging.INFO)
         try:
-            self.run(filename)
+            with util.capture_pipeline_log(meta.s1_stpipe_logname):
+                self.run(filename)
         finally:
             stpipe_logger.removeHandler(stpipe_handler)
 

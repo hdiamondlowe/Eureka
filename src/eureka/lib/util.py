@@ -1,6 +1,8 @@
 import numpy as np
 import os
 import glob
+import logging
+from contextlib import contextmanager
 from astropy.io import fits
 from scipy.interpolate import griddata
 from scipy.ndimage import zoom
@@ -25,6 +27,40 @@ COMMON_IMPORTS = np.array([
     ["astraeus", "astropy", "eureka", "h5py", "matplotlib", "numpy",
      "pandas", "xarray", ],
 ], dtype=object)
+
+
+@contextmanager
+def capture_pipeline_log(log_path):
+    """Temporarily save 'stpipe' and 'CRDS' logger output to a file.
+
+    The underlying jwst pipeline (via the 'stpipe' logger) and CRDS (via
+    the 'CRDS' logger) already print their messages to the terminal. This
+    context manager additionally attaches a FileHandler to both loggers so
+    that the same messages are also saved to a supplementary log file,
+    without changing what is shown on the terminal.
+
+    Parameters
+    ----------
+    log_path : str
+        Path to the supplementary log file. Opened in append mode, so
+        repeated calls (e.g. once per file segment in a run) accumulate
+        into the same file rather than overwriting it.
+    """
+    file_handler = logging.FileHandler(log_path, mode='a')
+    file_handler.setFormatter(
+        logging.Formatter('%(asctime)s - %(name)s - %(message)s'))
+    file_handler.setLevel(logging.INFO)
+
+    stpipe_logger = logging.getLogger('stpipe')
+    crds_logger = logging.getLogger('CRDS')
+    stpipe_logger.addHandler(file_handler)
+    crds_logger.addHandler(file_handler)
+    try:
+        yield
+    finally:
+        stpipe_logger.removeHandler(file_handler)
+        crds_logger.removeHandler(file_handler)
+        file_handler.close()
 
 
 def readfiles(meta):
